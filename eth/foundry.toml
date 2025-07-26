@@ -1,0 +1,46 @@
+[profile.default]
+src = "src"
+out = "out"
+script = "script"
+libs = ["dependencies"]
+
+# Compilation
+evm_version = "cancun"
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 10_000
+via_ir = true
+extra_output_files = ["metadata", "irOptimized"]
+
+fs_permissions = [
+    { access = "read", path = "./test/bin" }
+]
+
+[fmt]
+line_length = 80
+int_types = "short"
+number_underscore = "preserve"
+ignore = []
+
+[doc]
+out = "docs_generated" # Note to not overwrite own docs
+
+[dependencies]
+forge-std = "1.9.6"
+cross-chain-swap = { version = "1", git = "https://github.com/1inch/cross-chain-swap.git", rev = "16d366f4ab33684576a503c92a603482f548c9c0" }
+limit-order-protocol = { version = "4.3.2", git = "https://github.com/1inch/limit-order-protocol", rev = "b655e74665559450ebf3500c2149b805db8ee229" }
+openzepplin-contracts = { version = "1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts", rev = "6f4ebf11901a5a03d9f8aed3f59187d55b301ab8" }
+solidity-utils = { version = "1", git = "https://github.com/1inch/solidity-utils", rev = "94611cc4ddb6c7c55f9d20f3093074ecca5440ba" }
+murky = { version = "1", git = "https://github.com/dmfxyz/murky", rev = "991e371eb1dfa9f86701869eb08ec4e98c3cc0b0" }
+limit-order-settlement = { version = "1", git = "https://github.com/1inch/limit-order-settlement", rev = "cb66919fa3bdb54631b22265c2fa77501e480b54" }
+# openzepplin-contracts = { version = "1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts", rev = "cb2aaaa04a292887c49839cd958b08a83979d746" }
+
+[soldeer]
+# See https://github.com/mario-eth/soldeer/blob/main/USAGE.md#configuration
+remappings_generate = false
+remappings_regenerate = false
+remappings_version = false
+remappings_location = "txt"
+recursive_deps = false
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
