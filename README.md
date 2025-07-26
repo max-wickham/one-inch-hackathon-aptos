@@ -28,8 +28,10 @@ Make basic UI.
 Current:
 - [x] Aptos escrow factory
 - [x] Test aptos escrow factory
+- [x] Implement multi-fill in aptos
+- [x] Test multi-fill in aptos
+- [_] Finish test eth with mock limit order
 - [_] Implement limit order with eth
 - [_] Test limit order with eth
-- [_] Finish test eth with mock limit order
-- [_] Implement multi-fill in aptos
-- [_] Test multi-fill in aptos
+- [_] Format nicely aptos code
+- [_] Check competition timeline and information
