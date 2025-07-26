@@ -24,3 +24,12 @@ Sunday
 Get relay working with api in python
 Deploy eth to testnet.
 Make basic UI.
+
+Current:
+- [x] Aptos escrow factory
+- [x] Test aptos escrow factory
+- [_] Implement limit order with eth
+- [_] Test limit order with eth
+- [_] Finish test eth with mock limit order
+- [_] Implement multi-fill in aptos
+- [_] Test multi-fill in aptos

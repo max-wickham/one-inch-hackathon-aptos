@@ -1,6 +1,7 @@
 
 module escrow_factory::factory {
     use aptos_std::hash;
+    use std::aptos_hash;
     use aptos_std::timestamp;
     use aptos_std::signer;
     use aptos_framework::fungible_asset::FungibleAsset;
@@ -36,8 +37,21 @@ module escrow_factory::factory {
         receiver: address, // address of the receiver
         hashlock: vector<u8>, // sha3-256(secret)
         timelock: Timelock,
+        startTimestamp: u64, // Timestamp when the escrow was created
         source: address,
         vault_cap: account::SignerCapability
+    }
+
+    struct FusionPlusOrder has key {
+        // Stores the deposit amount
+        vault_cap: account::SignerCapability
+        desposit_amount: u64, // Amount of the asset being deposited
+        depositor: address, // address of the depositor
+
+        hashlock: vector<u8>, // sha3-256(secret)
+        order_hash: vector<u8>, // hash of the order
+        timelock: Timelock, // Timelock parameters
+        minIncentiveFee: u64, // Minimum incentive fee for the resolver
     }
 
     #[event]
@@ -53,6 +67,58 @@ module escrow_factory::factory {
         cancelTimestamp: u64,
         publicCancelTimestamp: u64,
         recoverTimestamp: u64
+    }
+
+    #[event]
+    struct FusionPlusOrderCreatedEvent has drop, store {
+        vault_address: address,
+        depositor: address,
+        deposit_amount: u64,
+        minIncentiveFee: u64,
+        hashlock: vector<u8>,
+        order_hash: vector<u8>,
+        withdrawTimestamp: u64,
+        publicWithDrawTimestamp: u64,
+        cancelTimestamp: u64,
+        publicCancelTimestamp: u64,
+        recoverTimestamp: u64
+    }
+
+    public fun createOrder<M: key>(
+        account: &signer,
+        depositAssetMetadata: object::Object<M>,
+        deposit_amount: u64,
+        minIncentiveFee: u64,
+        salt: vector<u8>,
+        hashlock: vector<u8>,
+        withDrawPeriod: u64,
+        publicWithDrawPeriod: u64,
+        cancelPeriod: u64,
+        publicCancelPeriod: u64,
+        recoverPeriod: u64
+    ): address {
+        let orderHash = aptos_hash::keccak256(
+            vector[
+                depositAssetMetadata,
+                deposit_amount,
+                minIncentiveFee,
+                salt,
+                hashlock,
+                withDrawPeriod,
+                publicWithDrawPeriod,
+                cancelPeriod,
+                publicCancelPeriod,
+                recoverPeriod
+            ]
+        );
+        
+        let (vault_signer, cap) = account::create_resource_account(account, orderHash);
+        let addr = signer::address_of(account);
+
+    }
+
+    public fun escrow_exists(vault_address: address): bool {
+        exists<Escrow>(vault_address)
     }
 
     public fun createEscrow<M: key, N: key>(
@@ -72,6 +138,7 @@ module escrow_factory::factory {
     ): address {
         let (vault_signer, cap) = account::create_resource_account(account, orderHash);
         let addr = signer::address_of(account);
+        // addr
         let escrow = Escrow {
             incentiveFee,
             deposit,
@@ -137,7 +204,7 @@ module escrow_factory::factory {
         let vault_signer = account::create_signer_with_capability(&escrow.vault_cap);
 
         // Check if the secret matches the hashlock
-        assert!(hash::sha3_256(secret) == escrow.hashlock, 0x1);
+        assert!(aptos_hash::keccak256(secret) == escrow.hashlock, 0x1);
 
         // Check the timelock state
         if (timestamp::now_seconds() >= escrow.timelock.publicWithDrawTimestamp) {
