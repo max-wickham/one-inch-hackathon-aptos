@@ -1,7 +1,10 @@
 forge-std@v1/=dependencies/forge-std-1.9.6/
 cross-chain-swap@1=dependencies/cross-chain-swap-1/contracts
 limit-order-protocol@4=dependencies/limit-order-protocol-4.3.2/contracts
-limit-order-settlement=dependencies/limit-order-protocol-4.3.2
 solidity-utils=dependencies/solidity-utils-1/
+@1inch/solidity-utils=dependencies/solidity-utils-1/
 murky=dependencies/murky-1/
 limit-order-settlement=dependencies/limit-order-settlement-1
+openzepplin-contracts=dependencies/openzepplin-contracts-1
+openzeppelin-contracts=dependencies/openzepplin-contracts-1
+@openzeppelin=dependencies/openzepplin-contracts-1

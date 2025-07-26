@@ -6,7 +6,7 @@ libs = ["dependencies"]
 
 # Compilation
 evm_version = "cancun"
-solc_version = "0.8.24"
+solc_version = "0.8.23"
 optimizer = true
 optimizer_runs = 10_000
 via_ir = true
