@@ -89,7 +89,8 @@ contract ResolverTest is Test {
                 (uint(srcPublicCancellationDelay) << 96) |
                 (uint(dstWithdrawalDelay) << 128) |
                 (uint(dstPublicWithdrawalDelay) << 160) |
-                (uint(dstCancellationDelay) << 192)
+                (uint(dstCancellationDelay) << 192) |
+                (uint(block.timestamp) << 224)
         );
 
         IEscrowFactory.ExtraDataArgs memory extraDataArgs = IEscrowFactory

@@ -107,7 +107,9 @@ interface IOrderMixin {
         payable
         returns (uint256 makingAmount, uint256 takingAmount, bytes32 orderHash);
 
-    function hashOrder(IOrderMixin.Order calldata order) external pure returns (bytes32);
+    function hashOrder(
+        IOrderMixin.Order calldata order
+    ) external pure returns (bytes32);
 }
 
 contract Resolver is Ownable {
@@ -125,6 +127,8 @@ contract Resolver is Ownable {
         _LOP = lop;
         _Factory = factory;
     }
+
+    receive() external payable {} // solhint-disable-line no-empty-blocks
 
     function getExtensions(
         IEscrowFactory.ExtraDataArgs calldata extraDataArgs,
@@ -145,20 +149,27 @@ contract Resolver is Ownable {
             resolversCount
         );
         console.log("Resolver.getExtensions");
-        console.logBytes( abi.encodePacked(resolverExtraData));
+        console.logBytes(abi.encodePacked(resolverExtraData));
         // 0x00000e11a386870a03bc70d1b069759808
         // 0x00000e11a386870a03bc70d1b069759808
-        return ExtensionsLib.newExtensions(
-            new bytes(0), // No Maker Asset suffix
-            new bytes(0), // No Taker Asset suffix
-            new bytes(0), // No Making Amount Data
-            abi.encodePacked(address(this)), // No Taking Amount Data
-            new bytes(0), // No Predicate
-            permit, // Maker Permit
-            new bytes(0), // No Maker Asset Permit
-            abi.encodePacked(_Factory, abi.encodePacked(resolverExtraData,abi.encode(extraDataArgs))),
-            new bytes(0) // No Custom Data
-        );
+        return
+            ExtensionsLib.newExtensions(
+                new bytes(0), // No Maker Asset suffix
+                new bytes(0), // No Taker Asset suffix
+                new bytes(0), // No Making Amount Data
+                abi.encodePacked(address(this)), // No Taking Amount Data
+                new bytes(0), // No Predicate
+                permit, // Maker Permit
+                new bytes(0), // No Maker Asset Permit
+                abi.encodePacked(
+                    _Factory,
+                    abi.encodePacked(
+                        resolverExtraData,
+                        abi.encode(extraDataArgs)
+                    )
+                ),
+                new bytes(0) // No Custom Data
+            );
     }
     function deploySrc(
         IBaseEscrow.Immutables calldata immutables,
@@ -169,12 +180,7 @@ contract Resolver is Ownable {
         uint amount,
         bytes calldata permit, // Permit the making amount to the OrderMixin for the token type
         IEscrowFactory.ExtraDataArgs calldata extraDataArgs
-    )
-        external
-        payable
-        onlyOwner
-        returns (address)
-    {
+    ) external payable onlyOwner returns (address) {
         IBaseEscrow.Immutables memory immutablesMem = immutables;
 
         // Set the timelock deployed at value
@@ -208,14 +214,18 @@ contract Resolver is Ownable {
 
         bytes32 vs = bytes32((uint256(v - 27) << 255)) | s;
         // Call the fillOrderArgs function on the LOP contract
-        (uint256 makingAmount, uint256 takingAmount, bytes32 orderHash) = IOrderMixin(_LOP).fillOrderArgs(
-            order,
-            r,
-            vs,
-            amount,
-            takerTraits,
-            args
-        );
+        (
+            uint256 makingAmount,
+            uint256 takingAmount,
+            bytes32 orderHash
+        ) = IOrderMixin(_LOP).fillOrderArgs(
+                order,
+                r,
+                vs,
+                amount,
+                takerTraits,
+                args
+            );
 
         return escrow;
     }
