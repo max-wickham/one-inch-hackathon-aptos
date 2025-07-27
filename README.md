@@ -33,5 +33,4 @@ Current:
 - [_] Finish test eth with mock limit order
 - [_] Implement limit order with eth
 - [_] Test limit order with eth
-- [_] Format nicely aptos code
-- [_] Check competition timeline and information
+- [_] Support merkle tree hashlock in aptos
