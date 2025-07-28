@@ -1,5 +1,6 @@
 // TODO: Whitelist of address that can call functions
 // TODO: Check who can call in cancel and withdraw
+// TODO: Escrow dest
 
 module escrow_factory::factory {
     use aptos_std::hash;
@@ -21,7 +22,7 @@ module escrow_factory::factory {
     const EINVALID_ASSET_TYPE: u64 = 5;EINVALID_ASSET_TYPE
 
     /* ------------------------------------------------------------ *
-    *  Data types                                                  *
+    *  Data types                                                   *
     * ------------------------------------------------------------ */
 
     /// Timelock parameters (seconds since Unix epoch)
@@ -32,44 +33,49 @@ module escrow_factory::factory {
         public_cancel_period_s: u64 // Timestamp when the receiver can cancel
     }
 
-    /// One hash-locked escrow
+    /// One hash-locked escrow. (Can be src or dst escrow.)
     struct Escrow has key {
         incentive_fee: u64, // Incentive fee for the resolver
         deposit: u64, // Amount of the asset being deposited
-        depositor: address, // address of the depositor
-        receiver: address, // address of the receiver
-        hashlock: vector<u8>, // sha3-256(secret)
-        timelock: Timelock,
+        depositor: address, // Address of the depositor
+        receiver: address, // Address of the receiver
+        hashlock: vector<u8>, // Keccak256 hash of the secret
+        timelock: Timelock, // Timelock parameters
         start_timestamp: u64, // Timestamp when the escrow was created
-        source: address, //
-        escrow_cap: account::SignerCapability
+        source: address, // Creator of the escrow
+        escrow_cap: account::SignerCapability // Signer capability for the escrow
     }
 
+    // FusionPlusOrder allowing for multiple escrows to be created to support multi-fill
     struct FusionPlusOrder has key {
-        recover_incentive_fee: u64, // Total incentive fee to be paid to the resolver who calls recover.
-        recover_timestamp: u64, // Timestamp after which the order value can be recovered.
-        deposit_amount: u64, // Amount of the asset being deposited.
-        depositor: address, // Address of the depositor.
-        hashlock: vector<u8>, // Keaccak256 hash of the secret.
-        order_hash: vector<u8>, // Hash of the order parameters.
-        timelock: Timelock, // Timelock parameters.
-        min_incentive_fee: u64, // Minimum incentive fee for escrow actions.
-        deposit_asset_type: address, // Address of the deposit asset type.
-        incentive_fee_asset_type: address, // Address of the incentive fee asset type.
+        recover_incentive_fee: u64, // Total incentive fee to be paid to the resolver who calls recover
+        recover_timestamp: u64, // Timestamp after which the order value can be recovered
+        deposit_amount: u64, // Amount of the asset being deposited
+        depositor: address, // Address of the depositor
+        hashlock: vector<u8>, // Keaccak256 hash of the secret
+        order_hash: vector<u8>, // Hash of the order parameters
+        allow_multi_fill: bool, // Whether the order allows multiple escrows to be created
+        whitelisted_addresses: vector<address>, // Addresses that can create escrows for this order
+        timelock: Timelock, // Timelock parameters
+        min_incentive_fee: u64, // Minimum incentive fee for escrow actions
+        deposit_asset_type: address, // Address of the deposit asset type
+        incentive_fee_asset_type: address, // Address of the incentive fee asset type
         order_cap: account::SignerCapability,
     }
 
     public fun createOrder<M: key>(
         account: &signer,
-        depositAssetMetadata: object::Object<M>,
-        incentive_feeAssetMetadata: object::Object<M>,
-        recover_incentive_fee: u64,
-        recoverPeriod: u64,
-        deposit_amount: u64,
-        min_incentive_fee: u64,
-        salt: vector<u8>,
-        hashlock: vector<u8>,
-        withDrawPeriod: u64,
+        depositAssetMetadata: object::Object<M>,        // Metadata of the deposit asset
+        incentive_feeAssetMetadata: object::Object<M>,  // Metadata of the incentive fee asset
+        recover_incentive_fee: u64,                     // Total incentive fee to be paid to the resolver who calls recover
+        recoverPeriod: u64,                             // Time period after which the order value can be recovered
+        deposit_amount: u64,                            // Amount of the asset being deposited      
+        min_incentive_fee: u64,                         // Minimum incentive fee for escrow actions
+        salt: vector<u8>,                               // Salt for the order hash  
+        hashlock: vector<u8>,                           // Keccak256 hash of the secret 
+        allow_multi_fill: bool,                         // Whether the order allows multiple escrows to be created
+        whitelisted_addresses: vector<address>,         // Addresses that can create escrows for this order
+        withDrawPeriod: u64,                       
         publicWithDrawPeriod: u64,
         cancelPeriod: u64,
         publicCancelPeriod: u64
@@ -112,6 +118,8 @@ module escrow_factory::factory {
                 cancel_period_s: cancelPeriod,
                 public_cancel_period_s: publicCancelPeriod
             }
+            allow_multi_fill,
+            whitelisted_addresses
         };
         move_to<FusionPlusOrder>(&vault_signer, order);
 
@@ -140,25 +148,54 @@ module escrow_factory::factory {
         exists<Escrow>(vault_address)
     }
 
-    public fun createEscrow<M: key, N: key>(
+    public fun createEscrowSrc<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
         depositAssetMetadata: object::Object<N>,
         makeAmount: u64,
         incentive_fee: u64,
-        receiver: address
+        receiver: address,
+        salt: vector<u8>
     ): address acquires FusionPlusOrder {
+        // Find the order and create an escrow signer for it
         assert!(exists<FusionPlusOrder>(order_address), ERESOURCE_DOESNT_EXIST);
         let order = borrow_global<FusionPlusOrder>(order_address);
         let order_signer = account::create_signer_with_capability(&order.order_cap);
-
-        let (vault_signer, cap) =
-            account::create_resource_account(account, order.order_hash);
+        let escrow_hash =
+            aptos_hash::keccak256(
+                bcs::to_bytes(
+                    &vector[
+                        bcs::to_bytes(&order.order_hash),
+                        bcs::to_bytes(&salt),
+                    ]
+                )
+            );
+        let (escrow_signer, cap) =
+            account::create_resource_account(account, escrow_hash);
         let addr = signer::address_of(account);
 
+        // Ensure that the incentive fee is greater than the minimum incentive fee
         assert!(incentive_fee > order.min_incentive_fee, EINVALID_BALANCE);
+
+        // TODO set deposit amonut to the order balance
+        // Ensure that the make amount is less than or equal to the deposit amount
         assert!(makeAmount <= order.deposit_amount, EINVALID_BALANCE);
+
+        // If multi fill is not allowed, ensure that the make amount is equal to the deposit amount
+        if (!order.allow_multi_fill) {
+            // Ensure that the make amount is equal to the deposit amount
+            assert!(makeAmount == order.deposit_amount, EINVALID_BALANCE);
+        }
+
+        // Ensure that the receiver is whitelisted if whitelist exists
+        if (order.whitelisted_addresses.len() > 0) {
+            // Ensure that the address is whitelisted
+            assert!(
+                vector::contains(&order.whitelisted_addresses, &addr),
+                EINVALID_SIGNER
+            );
+        }
 
         // Verify that the asset types match the order
         assert!(
@@ -177,6 +214,7 @@ module escrow_factory::factory {
             EINVALID_TIMELOCK_STATE
         );
 
+        // Create the escrow object
         let escrow = Escrow {
             incentive_fee,
             deposit: makeAmount,
@@ -188,28 +226,43 @@ module escrow_factory::factory {
             source: signer::address_of(&order_signer),
             escrow_cap: cap
         };
-        move_to<Escrow>(&vault_signer, escrow);
+        move_to<Escrow>(&escrow_signer, escrow);
 
         // Withdraw the incentive fee from the primary fungible store
-        // and deposit it into the vault's primary store.
+        // and deposit it into the escrow's primary store.
         let incentive_fee_fa: FungibleAsset =
             primary_fungible_store::withdraw(
                 account, incentive_feeAssetMetadata, incentive_fee
             );
-        // … and push them into the vault’s primary store
+        // … and push them into the escrow primary store
         primary_fungible_store::deposit(
-            signer::address_of(&vault_signer), incentive_fee_fa
+            signer::address_of(&escrow_signer), incentive_fee_fa
         );
 
-        // Withdraw the deposit from the primary fungible store
+        // Withdraw the make amount from the primary fungible store
         let deposit_fa: FungibleAsset =
             primary_fungible_store::withdraw(
                 &order_signer, depositAssetMetadata, makeAmount
             );
         // … and push them into the vault’s primary store
-        primary_fungible_store::deposit(signer::address_of(&vault_signer), deposit_fa);
+        primary_fungible_store::deposit(signer::address_of(&escrow_signer), deposit_fa);
 
-        signer::address_of(&vault_signer)
+        // If the balance of the deposit asset in the order is 0 return the recover incentive to the creator
+        let order_balance =
+            primary_fungible_store::balance(
+                signer::address_of(&order_signer), depositAssetMetadata
+            );
+        if (order_balance == 0) {
+            // Withdraw the recover incentive fee from the escrow's primary store
+            let recover_incentive_fa: FungibleAsset =
+                primary_fungible_store::withdraw(
+                    &escrow_signer, incentive_feeAssetMetadata, order.recover_incentive_fee
+                );
+            // … and push them into the primary store of the order creator
+            primary_fungible_store::deposit(order.depositor, recover_incentive_fa);
+        }
+
+        signer::address_of(&escrow_signer)
     }
 
     public fun recover<M: key, N: key>(

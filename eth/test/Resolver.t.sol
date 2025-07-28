@@ -28,13 +28,10 @@ contract MockPermitTakerToken is ERC20Permit {
 
 contract ResolverTest is Test {
 
-    // address constant PERMIT2 = address(0x000000000022D473030F116dDEE9F6B43aC78BA3);
-
     function setUp() public {
 
         vm.warp(vm.getBlockTimestamp() + 100 hours);
     }
-
 
     function test_deploySrcEscrow() public {
         MockPermitToken token = new MockPermitToken();
@@ -57,15 +54,6 @@ contract ResolverTest is Test {
         uint makeAmount = 1 ether;
         Vm.Wallet memory maker = vm.createWallet("maker");
         token.transfer(maker.addr, makeAmount * 3);
-
-
-
-        // Give the MockPermit2 contract unlimited allowance on the maker
-        // vm.prank(maker.addr);
-        // token.approve(PERMIT2, type(uint256).max);
-
-        // Vm.Wallet memory taker = vm.createWallet("taker");
-
 
         uint takeAmount = 1;
         takerToken.transfer(address(resolver), 10000 ether);

@@ -1,36 +1,25 @@
-- _ Get all libs for eth installed
-- _ Get basic src order creation working 
-- _ Create forge test for src order creation
+Monday:
 
-- _ Write basic dst factory for aptos
-- _ Create fake token on Aptos
-- _ Create test on aptos with fake token
+- Script to deploy eth contracts
+- Script to create the eth src
+- Script to create the eth dst
 
-- _ Create dst factory call on eth
-- _ Create src factory on Aptos
+- Script to deploy the aptos contracts
+- Script to create the aptos src
+- Script to create the aptos dst
 
-- _ Clients....
+- Test with scripts transferning assets between aptos and eth
 
-- _ Switch to using LOP in mock LimitOrder.sol
+Tuesday:
 
+- Get multifill working 
+- Create relayer implementation
 
-Saturday:
-Get working test of aptos escrows and aptos resolver
-Check proper docs of resolver
-Check timeline etc. of competition
-Get LimitOrder also working in test for eth
+Wednesday: 
 
-Sunday
-Get relay working with api in python
-Deploy eth to testnet.
-Make basic UI.
+- Create other implementation of the contract on other chains??
 
-Current:
-- [x] Aptos escrow factory
-- [x] Test aptos escrow factory
-- [x] Implement multi-fill in aptos
-- [x] Test multi-fill in aptos
-- [_] Finish test eth with mock limit order
-- [_] Implement limit order with eth
-- [_] Test limit order with eth
-- [_] Support merkle tree hashlock in aptos
+Thursday:
+
+- Cleanup 
+- UI ?????
