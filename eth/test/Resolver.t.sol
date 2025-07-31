@@ -12,6 +12,9 @@ import {ERC20Permit} from "openzeppelin-contracts/contracts/token/ERC20/extensio
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {EscrowFactory} from "cross-chain-swap@1/EscrowFactory.sol";
 
+import {IOrderMixin, IBaseEscrow, IBaseExtension, IEscrowFactory, Timelocks, Address} from "../src/OneInchInterfaces.sol";
+
+
 contract MockPermitToken is ERC20Permit {
     constructor() ERC20("MyPermitToken", "MPT") ERC20Permit("MyPermitToken") {
         _mint(msg.sender, 1000000 * 10 ** decimals());

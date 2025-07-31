@@ -1,10 +1,10 @@
 [package]
-name = "one-inch"
+name = "order-factory"
 version = "1.0.0"
 authors = []
 
 [addresses]
-escrow_factory = "_"
+escrow_factory = "0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52"
 
 [dev-addresses]
 

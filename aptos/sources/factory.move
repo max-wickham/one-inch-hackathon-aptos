@@ -1,10 +1,10 @@
-// TODO: Whitelist of address that can call functions
-// TODO: Check who can call in cancel and withdraw
-// TODO: Escrow dest
+// TODO immutables object??
+// TODO incentive payed by relay??
 
-module escrow_factory::factory {
+module escrow_factory::order_factory {
     use aptos_std::hash;
     use std::bcs;
+    use std::vector;
     use std::aptos_hash;
     use aptos_std::timestamp;
     use aptos_std::signer;
@@ -12,6 +12,7 @@ module escrow_factory::factory {
     use aptos_framework::primary_fungible_store;
     use aptos_framework::object;
     use aptos_framework::account;
+    use std::debug;
 
     /********************  Errors  *************************/
     const EINVALID_BALANCE: u64 = 0;
@@ -19,7 +20,7 @@ module escrow_factory::factory {
     const EINVALID_SIGNER: u64 = 2;
     const ESTORE_NOT_PUBLISHED: u64 = 3;
     const EINVALID_TIMELOCK_STATE: u64 = 4;
-    const EINVALID_ASSET_TYPE: u64 = 5;EINVALID_ASSET_TYPE
+    const EINVALID_ASSET_TYPE: u64 = 5;
 
     /* ------------------------------------------------------------ *
     *  Data types                                                   *
@@ -60,26 +61,26 @@ module escrow_factory::factory {
         min_incentive_fee: u64, // Minimum incentive fee for escrow actions
         deposit_asset_type: address, // Address of the deposit asset type
         incentive_fee_asset_type: address, // Address of the incentive fee asset type
-        order_cap: account::SignerCapability,
+        order_cap: account::SignerCapability
     }
 
-    public fun createOrder<M: key>(
+    public entry fun createOrder<M: key>(
         account: &signer,
-        depositAssetMetadata: object::Object<M>,        // Metadata of the deposit asset
-        incentive_feeAssetMetadata: object::Object<M>,  // Metadata of the incentive fee asset
-        recover_incentive_fee: u64,                     // Total incentive fee to be paid to the resolver who calls recover
-        recoverPeriod: u64,                             // Time period after which the order value can be recovered
-        deposit_amount: u64,                            // Amount of the asset being deposited      
-        min_incentive_fee: u64,                         // Minimum incentive fee for escrow actions
-        salt: vector<u8>,                               // Salt for the order hash  
-        hashlock: vector<u8>,                           // Keccak256 hash of the secret 
-        allow_multi_fill: bool,                         // Whether the order allows multiple escrows to be created
-        whitelisted_addresses: vector<address>,         // Addresses that can create escrows for this order
-        withDrawPeriod: u64,                       
+        depositAssetMetadata: object::Object<M>, // Metadata of the deposit asset
+        incentive_feeAssetMetadata: object::Object<M>, // Metadata of the incentive fee asset
+        recover_incentive_fee: u64, // Total incentive fee to be paid to the resolver who calls recover
+        recoverPeriod: u64, // Time period after which the order value can be recovered
+        deposit_amount: u64, // Amount of the asset being deposited
+        min_incentive_fee: u64, // Minimum incentive fee for escrow actions
+        salt: vector<u8>, // Salt for the order hash
+        hashlock: vector<u8>, // Keccak256 hash of the secret
+        allow_multi_fill: bool, // Whether the order allows multiple escrows to be created
+        whitelisted_addresses: vector<address>, // Addresses that can create escrows for this order
+        withDrawPeriod: u64,
         publicWithDrawPeriod: u64,
         cancelPeriod: u64,
         publicCancelPeriod: u64
-    ): address {
+    ) {
         let incentive_feeAssetMetadataHash =
             aptos_hash::keccak256(bcs::to_bytes(&incentive_feeAssetMetadata));
         let order_hash =
@@ -117,7 +118,7 @@ module escrow_factory::factory {
                 public_withdraw_period_s: publicWithDrawPeriod,
                 cancel_period_s: cancelPeriod,
                 public_cancel_period_s: publicCancelPeriod
-            }
+            },
             allow_multi_fill,
             whitelisted_addresses
         };
@@ -140,15 +141,16 @@ module escrow_factory::factory {
         primary_fungible_store::deposit(
             signer::address_of(&vault_signer), incentive_fee_fa
         );
+        debug::print(&signer::address_of(&vault_signer));
 
-        signer::address_of(&vault_signer)
+        // signer::address_of(&vault_signer)
     }
 
-    public fun escrow_exists(vault_address: address): bool {
+    public  fun escrow_exists(vault_address: address): bool {
         exists<Escrow>(vault_address)
     }
 
-    public fun createEscrowSrc<M: key, N: key>(
+    public entry  fun createEscrowSrc<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -157,7 +159,7 @@ module escrow_factory::factory {
         incentive_fee: u64,
         receiver: address,
         salt: vector<u8>
-    ): address acquires FusionPlusOrder {
+    ) acquires FusionPlusOrder {
         // Find the order and create an escrow signer for it
         assert!(exists<FusionPlusOrder>(order_address), ERESOURCE_DOESNT_EXIST);
         let order = borrow_global<FusionPlusOrder>(order_address);
@@ -165,14 +167,12 @@ module escrow_factory::factory {
         let escrow_hash =
             aptos_hash::keccak256(
                 bcs::to_bytes(
-                    &vector[
-                        bcs::to_bytes(&order.order_hash),
-                        bcs::to_bytes(&salt),
-                    ]
+                    &vector[bcs::to_bytes(&order.order_hash), bcs::to_bytes(&salt)]
                 )
             );
-        let (escrow_signer, cap) =
-            account::create_resource_account(account, escrow_hash);
+        let (escrow_signer, cap) = account::create_resource_account(
+            account, escrow_hash
+        );
         let addr = signer::address_of(account);
 
         // Ensure that the incentive fee is greater than the minimum incentive fee
@@ -186,17 +186,18 @@ module escrow_factory::factory {
         if (!order.allow_multi_fill) {
             // Ensure that the make amount is equal to the deposit amount
             assert!(makeAmount == order.deposit_amount, EINVALID_BALANCE);
-        }
+        };
 
         // Ensure that the receiver is whitelisted if whitelist exists
-        if (order.whitelisted_addresses.len() > 0) {
+        if (vector::length(&order.whitelisted_addresses) > 0) {
             // Ensure that the address is whitelisted
             assert!(
                 vector::contains(&order.whitelisted_addresses, &addr),
                 EINVALID_SIGNER
             );
-        }
+        };
 
+        // debug::print(&signer::address_of(&escrow_signer));
         // Verify that the asset types match the order
         assert!(
             object::object_address(&incentive_feeAssetMetadata)
@@ -256,16 +257,85 @@ module escrow_factory::factory {
             // Withdraw the recover incentive fee from the escrow's primary store
             let recover_incentive_fa: FungibleAsset =
                 primary_fungible_store::withdraw(
-                    &escrow_signer, incentive_feeAssetMetadata, order.recover_incentive_fee
+                    &order_signer,
+                    incentive_feeAssetMetadata,
+                    order.recover_incentive_fee
                 );
             // … and push them into the primary store of the order creator
             primary_fungible_store::deposit(order.depositor, recover_incentive_fa);
-        }
-
-        signer::address_of(&escrow_signer)
+        };
+        debug::print(&signer::address_of(&escrow_signer));
+        // signer::address_of(&escrow_signer)
     }
 
-    public fun recover<M: key, N: key>(
+    public entry  fun createEscrowDst<M: key, N: key>(
+        account: &signer,
+        order_hash: vector<u8>,
+        receiver: address,
+        incentive_feeAssetMetadata: object::Object<M>,
+        depositAssetMetadata: object::Object<N>,
+        deposit_amount: u64,
+        incentive_fee: u64,
+        salt: vector<u8>,
+        hashlock: vector<u8>, // Keccak256 hash of the secret
+        withDrawPeriod: u64,
+        publicWithDrawPeriod: u64,
+        cancelPeriod: u64,
+        publicCancelPeriod: u64
+    ) {
+        let escrow_hash =
+            aptos_hash::keccak256(
+                bcs::to_bytes(
+                    &vector[bcs::to_bytes(&order_hash), bcs::to_bytes(&salt)]
+                )
+            );
+        let (escrow_signer, cap) = account::create_resource_account(
+            account, escrow_hash
+        );
+        let addr = signer::address_of(account);
+
+        // Deposit the incentive fee into the escrow primary store
+        let incentive_fee_fa: FungibleAsset =
+            primary_fungible_store::withdraw(
+                account, incentive_feeAssetMetadata, incentive_fee
+            );
+        // … and push them into the escrow primary store
+        primary_fungible_store::deposit(
+            signer::address_of(&escrow_signer), incentive_fee_fa
+        );
+        // Withdraw the deposit from the primary fungible store
+        let deposit_fa: FungibleAsset =
+            primary_fungible_store::withdraw(
+                account, depositAssetMetadata, deposit_amount
+            );
+        // … and push them into the vault’s primary store
+        primary_fungible_store::deposit(signer::address_of(&escrow_signer), deposit_fa);
+
+        // Create the escrow object
+        let escrow = Escrow {
+            incentive_fee,
+            deposit: deposit_amount,
+            hashlock,
+            depositor: addr,
+            receiver: receiver,
+            start_timestamp: timestamp::now_seconds(),
+            timelock: Timelock {
+                withdraw_period_s: withDrawPeriod,
+                public_withdraw_period_s: publicWithDrawPeriod,
+                cancel_period_s: cancelPeriod,
+                public_cancel_period_s: publicCancelPeriod
+            },
+            source: addr,
+            escrow_cap: cap
+        };
+
+        move_to<Escrow>(&escrow_signer, escrow);
+
+        // Return the address of the escrow signer
+        // signer::address_of(&escrow_signer)
+    }
+
+    public entry  fun recover<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -313,7 +383,7 @@ module escrow_factory::factory {
         primary_fungible_store::deposit(signer::address_of(account), incentive_fee_fa);
     }
 
-    public fun withdraw<M: key, N: key>(
+    public entry  fun withdraw<M: key, N: key>(
         account: &signer,
         vault_address: address,
         secret: vector<u8>,
@@ -322,7 +392,7 @@ module escrow_factory::factory {
     ) acquires Escrow {
         assert!(exists<Escrow>(vault_address), ERESOURCE_DOESNT_EXIST);
         let escrow = borrow_global<Escrow>(vault_address);
-        let vault_signer = account::create_signer_with_capability(&escrow.escrow_cap);
+        let escrow_signer = account::create_signer_with_capability(&escrow.escrow_cap);
 
         // Check if the secret matches the hashlock
         assert!(aptos_hash::keccak256(secret) == escrow.hashlock, 0x1);
@@ -339,7 +409,7 @@ module escrow_factory::factory {
             assert!(
                 timestamp::now_seconds()
                     >= escrow.start_timestamp + escrow.timelock.withdraw_period_s,
-                0x2
+                EINVALID_TIMELOCK_STATE
             );
             assert!(signer::address_of(account) == escrow.receiver, EINVALID_SIGNER);
         };
@@ -347,7 +417,7 @@ module escrow_factory::factory {
         // Withdraw the incentive fee from the vault's primary store
         let incentive_fee_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                &vault_signer, incentive_feeAssetMetadata, escrow.incentive_fee
+                &escrow_signer, incentive_feeAssetMetadata, escrow.incentive_fee
             );
         // … and push them into the primary store of the account
         primary_fungible_store::deposit(signer::address_of(account), incentive_fee_fa);
@@ -355,13 +425,13 @@ module escrow_factory::factory {
         // Withdraw the deposit from the vault's primary store
         let deposit_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                &vault_signer, depositAssetMetadata, escrow.deposit
+                &escrow_signer, depositAssetMetadata, escrow.deposit
             );
         // … and push them into the primary store of the account
         primary_fungible_store::deposit(escrow.receiver, deposit_fa);
     }
 
-    public fun cancel<M: key, N: key>(
+    public entry  fun cancel<M: key, N: key>(
         account: &signer,
         vault_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -369,7 +439,7 @@ module escrow_factory::factory {
     ) acquires Escrow {
         assert!(exists<Escrow>(vault_address), ERESOURCE_DOESNT_EXIST);
         let escrow = borrow_global<Escrow>(vault_address);
-        let vault_signer = account::create_signer_with_capability(&escrow.escrow_cap);
+        let escrow_signer = account::create_signer_with_capability(&escrow.escrow_cap);
 
         // Check the timelock state
         if (timestamp::now_seconds()
@@ -377,7 +447,7 @@ module escrow_factory::factory {
             assert!(
                 timestamp::now_seconds()
                     >= escrow.start_timestamp + escrow.timelock.cancel_period_s,
-            EINVALID_TIMELOCK_STATE
+                EINVALID_TIMELOCK_STATE
             );
             assert!(signer::address_of(account) == escrow.depositor, EINVALID_SIGNER);
         };
@@ -385,7 +455,7 @@ module escrow_factory::factory {
         // Withdraw the incentive fee from the vault's primary store
         let incentive_fee_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                &vault_signer, incentive_feeAssetMetadata, escrow.incentive_fee
+                &escrow_signer, incentive_feeAssetMetadata, escrow.incentive_fee
             );
         // … and push them into the primary store of the account
         primary_fungible_store::deposit(signer::address_of(account), incentive_fee_fa);
@@ -393,7 +463,7 @@ module escrow_factory::factory {
         // Withdraw the deposit from the vault's primary store
         let deposit_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                &vault_signer, depositAssetMetadata, escrow.deposit
+                &escrow_signer, depositAssetMetadata, escrow.deposit
             );
         // … and push them into the primary store of the account
         primary_fungible_store::deposit(escrow.depositor, deposit_fa);
