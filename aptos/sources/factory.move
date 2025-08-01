@@ -1,3 +1,4 @@
+// Whitelist token... ?
 
 module escrow_factory::order_factory {
     use aptos_std::hash;
@@ -11,6 +12,7 @@ module escrow_factory::order_factory {
     use aptos_framework::object;
     use aptos_framework::account;
     use std::debug;
+    use aptos_framework::event;
 
     /********************  Errors  *************************/
     const EINVALID_BALANCE: u64 = 0;
@@ -61,6 +63,15 @@ module escrow_factory::order_factory {
         incentive_fee_asset_type: address, // Address of the incentive fee asset type
         order_cap: account::SignerCapability
     }
+
+    #[event]
+    public struct OrderCreatedEvent has drop, store {
+        order_address: address,
+        depositor: address,
+        deposit_amount: u64,
+        order_hash: vector<u8>,
+    }
+
 
     public entry fun create_order<M: key>(
         relay: &signer,
@@ -141,6 +152,14 @@ module escrow_factory::order_factory {
         primary_fungible_store::deposit(
             signer::address_of(&vault_signer), incentive_fee_fa
         );
+        
+        let order_address = signer::address_of(&vault_signer);
+        event::emit(OrderCreatedEvent {
+            order_address: order_address,
+            depositor: addr,
+            deposit_amount,
+            order_hash,
+        });
         debug::print(&signer::address_of(&vault_signer));
 
         // signer::address_of(&vault_signer)
@@ -150,6 +169,17 @@ module escrow_factory::order_factory {
         exists<Escrow>(vault_address)
     }
 
+    
+    
+#[event]
+public struct EscrowCreatedEvent has drop, store {
+    escrow_address: address,
+    order_address: address,
+    receiver: address,
+    makeAmount: u64,
+    incentive_fee: u64,
+    escrow_hash: vector<u8>,
+}
     public entry  fun create_escrow_src<M: key, N: key>(
         account: &signer,
         order_address: address,
@@ -264,7 +294,18 @@ module escrow_factory::order_factory {
             // … and push them into the primary store of the order creator
             primary_fungible_store::deposit(receiver, recover_incentive_fa);
         };
-        debug::print(&signer::address_of(&escrow_signer));
+
+        let escrow_address = signer::address_of(&escrow_signer);
+        event::emit(EscrowCreatedEvent {
+            escrow_address,
+            order_address,
+            receiver,
+            makeAmount,
+            incentive_fee,
+            escrow_hash,
+        });
+
+        debug::print(&escrow_address);
         // signer::address_of(&escrow_signer)
     }
 
