@@ -1,5 +1,3 @@
-// TODO immutables object??
-// TODO incentive payed by relay??
 
 module escrow_factory::order_factory {
     use aptos_std::hash;
@@ -64,7 +62,8 @@ module escrow_factory::order_factory {
         order_cap: account::SignerCapability
     }
 
-    public entry fun createOrder<M: key>(
+    public entry fun create_order<M: key>(
+        relay: &signer,
         account: &signer,
         depositAssetMetadata: object::Object<M>, // Metadata of the deposit asset
         incentive_feeAssetMetadata: object::Object<M>, // Metadata of the incentive fee asset
@@ -135,8 +134,9 @@ module escrow_factory::order_factory {
         // Deposit the incentive fee into the vault's primary store
         let incentive_fee_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                account, incentive_feeAssetMetadata, recover_incentive_fee
+                relay, incentive_feeAssetMetadata, recover_incentive_fee
             );
+        
         // … and push them into the vault’s primary store
         primary_fungible_store::deposit(
             signer::address_of(&vault_signer), incentive_fee_fa
@@ -150,7 +150,7 @@ module escrow_factory::order_factory {
         exists<Escrow>(vault_address)
     }
 
-    public entry  fun createEscrowSrc<M: key, N: key>(
+    public entry  fun create_escrow_src<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -262,13 +262,13 @@ module escrow_factory::order_factory {
                     order.recover_incentive_fee
                 );
             // … and push them into the primary store of the order creator
-            primary_fungible_store::deposit(order.depositor, recover_incentive_fa);
+            primary_fungible_store::deposit(receiver, recover_incentive_fa);
         };
         debug::print(&signer::address_of(&escrow_signer));
         // signer::address_of(&escrow_signer)
     }
 
-    public entry  fun createEscrowDst<M: key, N: key>(
+    public entry  fun create_escrow_dst<M: key, N: key>(
         account: &signer,
         order_hash: vector<u8>,
         receiver: address,

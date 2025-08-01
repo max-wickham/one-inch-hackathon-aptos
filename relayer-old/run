@@ -1,0 +1,4 @@
+#!/bin/bash
+
+source .env
+poetry run python relay.py

@@ -13,10 +13,15 @@ script {
     use std::debug;
     use std::option;
     use aptos_std::signer;
-use aptos_std::base16;
+    use aptos_std::base16;
     
 
     entry fun main(account: &signer) {
+        // Addresses for the relay and user, replace with addresses you want to use
+        let relay_addr = @0x50fb544445622bee716f1a50c93ea72fe18525ac7f18daa617ff6d74a28f9f93;
+        let user_addr = @0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1;
+
+
         // Create Incentive Token
         let incentive_constructor_ref = &create_named_object(account, b"IncentiveCoin");
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
@@ -45,15 +50,23 @@ use aptos_std::base16;
 
         let my_addr = signer::address_of(account);
 
-        // Mint 10000 Incentive tokens to yourself
+        // Mint test incentive tokens
         let incentive_mint_ref = generate_mint_ref(incentive_constructor_ref);
-        let minted_incentive = mint(&incentive_mint_ref, 100000);
+        let minted_incentive = mint(&incentive_mint_ref, 10000000);
         deposit(my_addr, minted_incentive);
+        let minted_incentive = mint(&incentive_mint_ref, 10000000);
+        deposit(user_addr, minted_incentive);
+        let minted_incentive = mint(&incentive_mint_ref, 10000000);
+        deposit(relay_addr, minted_incentive);
 
-        // Mint 10000 Deposit tokens to yourself
+        // int test deposit tokens
         let deposit_mint_ref = generate_mint_ref(deposit_constructor_ref);
-        let minted_deposit = mint(&deposit_mint_ref, 100000);
+        let minted_deposit = mint(&deposit_mint_ref, 10000000);
         deposit(my_addr, minted_deposit);
+        let minted_incentive = mint(&deposit_mint_ref, 10000000);
+        deposit(user_addr, minted_incentive);
+        let minted_incentive = mint(&deposit_mint_ref, 10000000);
+        deposit(relay_addr, minted_incentive);
 
         // Print the addresses of both token objects
         debug::print(&string::utf8(b"Incentive Token Object Address:"));
@@ -112,7 +125,8 @@ script {
         let cancel_period = 10800;
         let public_cancel_period = 14400;
 
-        order_factory::createOrder(
+        order_factory::create_order(
+            account,
             account,
             deposit_token_asset_metadata,
             incentive_fee_asset_metadata,
@@ -169,7 +183,7 @@ script {
         let receiver = @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52; // <-- FILL IN with the receiver's address
         let salt = b"my_escrow_salt_3"; // Unique salt per escrow
 
-        order_factory::createEscrowSrc<Metadata, Metadata>(
+        order_factory::create_escrow_src<Metadata, Metadata>(
             account,
             order_address,
             incentive_fee_asset_metadata,
