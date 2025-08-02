@@ -14,26 +14,141 @@ import {EscrowFactory} from "cross-chain-swap@1/EscrowFactory.sol";
 
 import {IOrderMixin, IBaseEscrow, IBaseExtension, IEscrowFactory, Timelocks, Address} from "../src/OneInchInterfaces.sol";
 
-
 contract MockPermitToken is ERC20Permit {
     constructor() ERC20("MyPermitToken", "MPT") ERC20Permit("MyPermitToken") {
         _mint(msg.sender, 1000000 * 10 ** decimals());
     }
-}
 
-contract MockPermitTakerToken is ERC20Permit {
-    constructor() ERC20("MyPermitTakerToken", "MPTT") ERC20Permit("MyPermitTakerToken") {
-        _mint(msg.sender, 100000000 ether);
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
     }
 }
 
+contract MockPermitTakerToken is ERC20Permit {
+    constructor()
+        ERC20("MyPermitTakerToken", "MPTT")
+        ERC20Permit("MyPermitTakerToken")
+    {
+        _mint(msg.sender, 100000000 ether);
+    }
 
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
 
 contract ResolverTest is Test {
-
     function setUp() public {
-
         vm.warp(vm.getBlockTimestamp() + 100 hours);
+    }
+
+    function test_mockGetFunctions() public {
+        MockPermitToken token = new MockPermitToken();
+        MockPermitTakerToken takerToken = new MockPermitTakerToken();
+        LimitOrderProtocol lop = new LimitOrderProtocol(IWETH(address(token)));
+        EscrowFactory factory = new EscrowFactory(
+            address(lop),
+            token,
+            token,
+            address(this),
+            30 minutes, // srcRescueDelay
+            30 minutes // dstRescueDelay
+        );
+        Resolver resolver = new Resolver(
+            address(lop),
+            address(factory),
+            address(this)
+        );
+
+        uint makeAmount = 1 ether;
+        Vm.Wallet memory maker = vm.createWallet("maker");
+        token.transfer(maker.addr, makeAmount * 3);
+
+        uint takeAmount = 1;
+        takerToken.transfer(address(resolver), 10000 ether);
+        vm.prank(address(resolver));
+        takerToken.approve(address(lop), type(uint256).max);
+
+        bytes32 secret = keccak256(abi.encodePacked("secret"));
+        bytes32 hashlock = keccak256(abi.encodePacked(secret));
+
+        Timelocks timelocks = resolver.getDefaultTimelock(
+            5 minutes, // srcWithdrawalDelay
+            10 minutes, // srcPublicWithdrawalDelay
+            15 minutes, // srcCancellationDelay
+            20 minutes, // srcPublicCancellationDelay
+            5 minutes, // dstWithdrawalDelay
+            10 minutes, // dstPublicWithdrawalDelay
+            14 minutes // dstCancellationDelay
+        );
+
+        IEscrowFactory.ExtraDataArgs memory extraDataArgs = resolver
+            .getExtraDataArgs(hashlock, timelocks);
+
+        bytes memory permit = _constructPermit(
+            resolver,
+            token,
+            maker.addr,
+            address(lop),
+            makeAmount,
+            block.timestamp + 1 hours,
+            maker.privateKey
+        );
+
+        bytes memory extensions = resolver.getExtensions(extraDataArgs, permit);
+
+        bytes32 extensionsHash = keccak256(extensions);
+
+        IOrderMixin.Order memory order = resolver.getOrder(
+            extensionsHash,
+            maker.addr,
+            address(token),
+            address(takerToken),
+            makeAmount
+        );
+
+        bytes32 orderHash = resolver.getOrderHash(order);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(maker.privateKey, orderHash);
+
+        IBaseEscrow.Immutables memory immutables = resolver.getImmutables(
+            orderHash,
+            hashlock,
+            maker.addr,
+            address(token),
+            makeAmount,
+            timelocks
+        );
+
+        address escrow = resolver.deploySrc(
+            order,
+            v,
+            r,
+            s,
+            immutables,
+            makeAmount,
+            permit,
+            extraDataArgs
+        );
+        Timelocks newTimelocks = Timelocks.wrap(
+            Timelocks.unwrap(timelocks) | (uint(block.timestamp) << 224)
+        );
+        IBaseEscrow.Immutables memory immutablesNew = resolver.getImmutables(
+            orderHash,
+            hashlock,
+            maker.addr,
+            address(token),
+            makeAmount,
+            newTimelocks
+        );
+
+        vm.warp(vm.getBlockTimestamp() + 5 minutes + 1 seconds);
+
+        // Now make the withdrawal using the secret
+        vm.prank(address(resolver));
+        IBaseEscrow(escrow).withdraw(secret, immutablesNew);
+
+        assertEq(token.balanceOf(address(resolver)), 1 ether);
     }
 
     function test_deploySrcEscrow() public {
@@ -93,6 +208,7 @@ contract ResolverTest is Test {
                 timelocks: timelock
             });
         bytes memory permit = _constructPermit(
+            resolver,
             token,
             maker.addr,
             address(lop),
@@ -113,17 +229,19 @@ contract ResolverTest is Test {
             takerAsset: Address.wrap(uint(uint160(address(takerToken)))),
             makingAmount: makeAmount,
             takingAmount: 0,
-            makerTraits: MakerTraitsLib.newMakerTraits(address(0), block.timestamp + 60, false, true) // MakerTraits.wrap(uint(1 << 255))
+            makerTraits: MakerTraitsLib.newMakerTraits(
+                address(0),
+                block.timestamp + 60,
+                false,
+                true
+            ) // MakerTraits.wrap(uint(1 << 255))
         });
 
         bytes32 orderHash = IOrderMixin(address(lop)).hashOrder(order);
 
         // Order sig
         // Permit
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
-            maker.privateKey,
-            orderHash
-        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(maker.privateKey, orderHash);
 
         IBaseEscrow.Immutables memory immutables = IBaseEscrow.Immutables({
             orderHash: orderHash, // Not actually used.
@@ -136,20 +254,27 @@ contract ResolverTest is Test {
             timelocks: timelock
         });
 
-        address escrow = resolver.deploySrc(immutables, order, v, r, s, makeAmount, permit, extraDataArgs);
+        address escrow = resolver.deploySrc(
+            order,
+            v,
+            r,
+            s,
+            immutables,
+            makeAmount,
+            permit,
+            extraDataArgs
+        );
         vm.warp(vm.getBlockTimestamp() + 5 minutes + 1 seconds);
 
         // Now make the withdrawal using the secret
         vm.prank(address(resolver));
-        IBaseEscrow(escrow).withdraw(
-            secret,
-            immutables
-        );
+        IBaseEscrow(escrow).withdraw(secret, immutables);
 
         assertEq(token.balanceOf(address(resolver)), 1 ether);
     }
 
     function _constructPermit(
+        Resolver resolver,
         ERC20Permit token,
         address owner,
         address spender,
@@ -157,34 +282,14 @@ contract ResolverTest is Test {
         uint deadline,
         uint ownerPrivateKey
     ) internal returns (bytes memory) {
-        uint nonce = token.nonces(owner);
-
-        // Get the domain separator
-        bytes32 domainSeparator = token.DOMAIN_SEPARATOR();
-
-        // Construct the permit struct hash
-        bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256(
-                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
-                ),
-                owner,
-                spender,
-                value,
-                nonce,
-                deadline - 1
-            )
+        bytes32 digest = resolver.getPermitDigest(
+            address(token),
+            owner,
+            spender,
+            value,
+            deadline
         );
-
-        // EIP-712 digest
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", domainSeparator, structHash)
-        );
-
-        // Sign the digest with the owner's private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        uint256 vs = (uint256(v - 27) << 255) | uint256(s);
-        return abi.encodePacked(token, value, uint32(deadline), r, vs);
-
+        return resolver.packSig(v, r, s, address(token), value, deadline);
     }
 }

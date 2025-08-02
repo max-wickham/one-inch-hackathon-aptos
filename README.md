@@ -5,15 +5,14 @@ Basic aptos Integration for FusionPlus.
 
 
 TODOAY: 
-Python
-- [_] Create order on aptos 
-- [_] Create escrow src on aptos
-- [_] Claim escrow on aptos
+Ts
+- [x] Create order on aptos 
+- [x] Create escrow src on aptos
+- [x] Claim escrow on aptos
 - [_] Create escrow dst on aptos
 
-- [_] Create order on eth
-- [_] Create escrow src on eth
-- [_] Claim escrow on eth
+- [-] Create escrow src on eth
+- [-] Claim escrow on eth
 - [_] Create escrow dst on eth
 
 - [_] Update to allow multi fill orders 
@@ -28,3 +27,13 @@ Python
 Saturday: 
 UI
 Tron ??
+Preset token balance for aptos to avoid having user signer 
+
+
+
+Get eth src working
+Get eth dst working
+Get aptos dst working
+
+Makr script aptos to eth
+Make script eth to aptos
