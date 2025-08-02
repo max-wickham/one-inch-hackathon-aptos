@@ -45,7 +45,7 @@ library MakerTraitsLib {
     uint256 private constant _USE_PERMIT2_FLAG = 1 << 248;
     uint256 private constant _UNWRAP_WETH_FLAG = 1 << 247;
 
-    function newMakerTraits(address sender, uint expiration, bool allowPartialFills_, bool hasExtension) public pure returns (MakerTraits) {
+    function newMakerTraits(address sender, uint expiration, bool allowPartialFills_, bool hasExtension, uint nonce) public pure returns (MakerTraits) {
         uint256 makerTraits = 0;
         makerTraits |= _POST_INTERACTION_CALL_FLAG;
         if (sender != address(0)) {
@@ -62,6 +62,9 @@ library MakerTraitsLib {
         if (hasExtension) {
             makerTraits |= _HAS_EXTENSION_FLAG; // Set the extension flag
         }
+        // Set the nonce
+        makerTraits  |= (nonce & _NONCE_OR_EPOCH_MASK) << _NONCE_OR_EPOCH_OFFSET; 
+        // (MakerTraits.unwrap(makerTraits) >> _NONCE_OR_EPOCH_OFFSET) & _NONCE_OR_EPOCH_MASK
         return MakerTraits.wrap(makerTraits);
     }
 

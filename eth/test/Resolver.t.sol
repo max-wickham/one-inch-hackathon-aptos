@@ -181,11 +181,11 @@ contract ResolverTest is Test {
         bytes32 secret = keccak256(abi.encodePacked("secret"));
         bytes32 hashlock = keccak256(abi.encodePacked(secret));
         // TODO timelock
-        uint32 srcWithdrawalDelay = 5 minutes;
+        uint32 srcWithdrawalDelay = 1 minutes;
         uint32 srcPublicWithdrawalDelay = 10 minutes;
         uint32 srcCancellationDelay = 15 minutes;
         uint32 srcPublicCancellationDelay = 20 minutes;
-        uint32 dstWithdrawalDelay = 5 minutes;
+        uint32 dstWithdrawalDelay = 1 minutes;
         uint32 dstPublicWithdrawalDelay = 10 minutes;
         uint32 dstCancellationDelay = 14 minutes; // Should be less than srcCancellation
         Timelocks timelock = Timelocks.wrap(
@@ -264,7 +264,7 @@ contract ResolverTest is Test {
             permit,
             extraDataArgs
         );
-        vm.warp(vm.getBlockTimestamp() + 5 minutes + 1 seconds);
+        vm.warp(vm.getBlockTimestamp() + 1 minutes + 1 seconds);
 
         // Now make the withdrawal using the secret
         vm.prank(address(resolver));

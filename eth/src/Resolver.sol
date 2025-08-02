@@ -168,7 +168,7 @@ contract Resolver is Ownable {
             takerAsset: Address.wrap(uint(uint160(address(mockTakerToken)))),
             makingAmount: makeAmount,
             takingAmount: 0,
-            makerTraits: MakerTraitsLib.newMakerTraits(address(0), block.timestamp + 60, false, true) // MakerTraits.wrap(uint(1 << 255))
+            makerTraits: MakerTraitsLib.newMakerTraits(address(0), block.timestamp + 10000, false, true, _nonces[maker]) // MakerTraits.wrap(uint(1 << 255))
         });
         return order;
     }
@@ -251,7 +251,24 @@ contract Resolver is Ownable {
         uint256 vs = (uint256(v - 27) << 255) | uint256(s);
         return abi.encodePacked(token, value, uint32(deadline), r, vs);
     }
+    
+    mapping (address => uint) private _nonces;
+    mapping(address => IBaseEscrow.Immutables) private _immutables;
+    mapping(bytes32 => address) _orderHashToEscrow;
+    function withdraw(bytes32 secret, address escrow) public {
+        // Get the immutables from the escrow
+        console.logAddress(escrow);
+        IBaseEscrow.Immutables memory immutables = _immutables[escrow];
+        console.logBytes(abi.encode(immutables));
+        IBaseEscrow(escrow).withdraw(secret, immutables);
+    }
 
+    function getEscrowAddress(bytes32 orderHash) public view returns (address) {
+        // Get the escrow address from the order hash
+        return _orderHashToEscrow[orderHash];
+    }
+
+    event EscrowCreated(address escrow);
 
     function deploySrc(
         IOrderMixin.Order memory order, // Must set valid extension, Must set is allowed sender
@@ -293,12 +310,7 @@ contract Resolver is Ownable {
             "Invalid order salt"
         );
         
-
-// f38ee1cdc13d5ecad3447499737790e633a360f8fdb7260b0416688dc41791ce7e993f18dffeb4f2000008290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5630000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000384000002580000012c000004b00000038400000258
-// f38ee1cdc13d5ecad3447499737790e633a360f8fdb7260b0416688dc3fa91ce7e993f18dffeb4f2000008290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5630000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000384000002580000012c000004b00000038400000258
-// 0x000001510000008c0000008c0000001400000014000000000000000000000000615e53e40cb4731d7ffb91ce7e993f18dffeb4f287850524d6390e713e556b9dae4c0eab3e93f89b000000000000000000000000000000000000000000000000000000003b9aca00688de03458477f3322e910033e80c4f8a4107e605766700eed7128a26590a1cc5ee66ed12a27a830ebfa5924d9a1b8b26350f97267e79eb2452965621ecff38ee1cdc13d5ecad3447499737790e633a360f8fdb7260b0416688dc41791ce7e993f18dffeb4f2000008290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5630000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000384000002580000012c000004b00000038400000258
-// 0x000001510000008c0000008c0000001400000014000000000000000000000000615e53e40cb4731d7ffb91ce7e993f18dffeb4f287850524d6390e713e556b9dae4c0eab3e93f89b000000000000000000000000000000000000000000000000000000003b9aca00688de03458477f3322e910033e80c4f8a4107e605766700eed7128a26590a1cc5ee66ed12a27a830ebfa5924d9a1b8b26350f97267e79eb2452965621ecff38ee1cdc13d5ecad3447499737790e633a360f8fdb7260b0416688dc3fa91ce7e993f18dffeb4f2000008290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5630000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000384000002580000012c000004b00000038400000258 
-        // Compute the fill order args
+       // Compute the fill order args
         bytes memory args = abi.encodePacked(
             address(escrow), // Target
             extensions // Extension
@@ -339,6 +351,21 @@ contract Resolver is Ownable {
                 args
             );
 
+        IBaseEscrow.Immutables memory immutablesStorage = immutables;
+
+        // Set the timelock deployed at value
+        timelock_uint = Timelocks.unwrap(immutablesStorage.timelocks);
+        timelock_uint = timelock_uint | (block.timestamp << 224);
+        immutablesStorage.timelocks = Timelocks.wrap(timelock_uint);
+        address escrowStor = IEscrowFactory(_Factory).addressOfEscrowSrc(
+            immutablesMem
+        );
+        console.logAddress(escrowStor);
+        _immutables[escrowStor] = immutablesStorage;
+        console.logBytes(abi.encode(immutablesStorage));
+        _nonces[maker] += 1; // Increment the nonce for the maker
+        _orderHashToEscrow[orderHash_] = escrowStor;
+        emit EscrowCreated(escrowStor);
         return escrow;
     }
 

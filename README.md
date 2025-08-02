@@ -11,17 +11,21 @@ Ts
 - [x] Claim escrow on aptos
 - [_] Create escrow dst on aptos
 
-- [-] Create escrow src on eth
-- [-] Claim escrow on eth
+- [x] Create escrow src on eth
+- [x] Claim escrow on eth
 - [_] Create escrow dst on eth
 
 - [_] Update to allow multi fill orders 
 
+- [_] Improve aptos design
+
 - [_] Fix tests on aptos
 - [_] Clean up aptos and eth code
 
-- [_] Implement contracts on SUI
-- [_] Implement python functions on SUI
+- [_] Make basic UI that show balances. 
+- [_] Make swaps using ui
+
+- [_] Implement contracts on SUI ????
 
 
 Saturday: 
@@ -31,9 +35,17 @@ Preset token balance for aptos to avoid having user signer
 
 
 
-Get eth src working
 Get eth dst working
 Get aptos dst working
 
 Makr script aptos to eth
 Make script eth to aptos
+
+Support Multi fill orders
+
+Improve escrow on aptos
+
+Make basic UI that show balances. 
+Make swaps using ui
+
+Make escrow on sui

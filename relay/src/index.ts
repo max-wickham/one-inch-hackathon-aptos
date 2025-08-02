@@ -411,989 +411,1017 @@ class ResolverManager {
 
         // Initialize resolver contract with transaction signer
         this.resolver = new ethers.Contract(
-            this.addresses.resolver,
-            [
+            this.addresses.resolver,[
+        {
+            "type": "constructor",
+            "inputs": [
+                { "name": "lop", "type": "address", "internalType": "address" },
                 {
-                    type: "constructor",
-                    inputs: [
-                        {
-                            name: "lop",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "factory",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "initialOwner",
-                            type: "address",
-                            internalType: "address",
-                        },
-                    ],
-                    stateMutability: "nonpayable",
-                },
-                { type: "receive", stateMutability: "payable" },
-                {
-                    type: "function",
-                    name: "deploySrc",
-                    inputs: [
-                        {
-                            name: "order",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                        { name: "v", type: "uint8", internalType: "uint8" },
-                        { name: "r", type: "bytes32", internalType: "bytes32" },
-                        { name: "s", type: "bytes32", internalType: "bytes32" },
-                        {
-                            name: "immutables",
-                            type: "tuple",
-                            internalType: "struct IBaseEscrow.Immutables",
-                            components: [
-                                {
-                                    name: "orderHash",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "hashlock",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "taker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "token",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "amount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "safetyDeposit",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "timelocks",
-                                    type: "uint256",
-                                    internalType: "Timelocks",
-                                },
-                            ],
-                        },
-                        {
-                            name: "amount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "permit",
-                            type: "bytes",
-                            internalType: "bytes",
-                        },
-                        {
-                            name: "extraDataArgs",
-                            type: "tuple",
-                            internalType: "struct IEscrowFactory.ExtraDataArgs",
-                            components: [
-                                {
-                                    name: "hashlockInfo",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "dstChainId",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "dstToken",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "deposits",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "timelocks",
-                                    type: "uint256",
-                                    internalType: "Timelocks",
-                                },
-                            ],
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "address", internalType: "address" },
-                    ],
-                    stateMutability: "payable",
+                    "name": "factory",
+                    "type": "address",
+                    "internalType": "address"
                 },
                 {
-                    type: "function",
-                    name: "getDefaultTimelock",
-                    inputs: [
-                        {
-                            name: "srcWithdrawalDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "srcPublicWithdrawalDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "srcCancellationDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "srcPublicCancellationDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "dstWithdrawalDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "dstPublicWithdrawalDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                        {
-                            name: "dstCancellationDelay",
-                            type: "uint32",
-                            internalType: "uint32",
-                        },
-                    ],
-                    outputs: [
-                        {
-                            name: "",
-                            type: "uint256",
-                            internalType: "Timelocks",
-                        },
-                    ],
-                    stateMutability: "pure",
-                },
-                {
-                    type: "function",
-                    name: "getExtensions",
-                    inputs: [
-                        {
-                            name: "extraDataArgs",
-                            type: "tuple",
-                            internalType: "struct IEscrowFactory.ExtraDataArgs",
-                            components: [
-                                {
-                                    name: "hashlockInfo",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "dstChainId",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "dstToken",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "deposits",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "timelocks",
-                                    type: "uint256",
-                                    internalType: "Timelocks",
-                                },
-                            ],
-                        },
-                        {
-                            name: "permit",
-                            type: "bytes",
-                            internalType: "bytes",
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "bytes", internalType: "bytes" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getExtensionsHash",
-                    inputs: [
-                        {
-                            name: "extensions",
-                            type: "bytes",
-                            internalType: "bytes",
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "bytes32", internalType: "bytes32" },
-                    ],
-                    stateMutability: "pure",
-                },
-                {
-                    type: "function",
-                    name: "getExtraDataArgs",
-                    inputs: [
-                        {
-                            name: "hashlockInfo",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "timelocks",
-                            type: "uint256",
-                            internalType: "Timelocks",
-                        },
-                    ],
-                    outputs: [
-                        {
-                            name: "",
-                            type: "tuple",
-                            internalType: "struct IEscrowFactory.ExtraDataArgs",
-                            components: [
-                                {
-                                    name: "hashlockInfo",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "dstChainId",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "dstToken",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "deposits",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "timelocks",
-                                    type: "uint256",
-                                    internalType: "Timelocks",
-                                },
-                            ],
-                        },
-                    ],
-                    stateMutability: "pure",
-                },
-                {
-                    type: "function",
-                    name: "getImmutables",
-                    inputs: [
-                        {
-                            name: "orderHash",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "hashlock",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "maker",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "token",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "amount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "timelocks",
-                            type: "uint256",
-                            internalType: "Timelocks",
-                        },
-                    ],
-                    outputs: [
-                        {
-                            name: "",
-                            type: "tuple",
-                            internalType: "struct IBaseEscrow.Immutables",
-                            components: [
-                                {
-                                    name: "orderHash",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "hashlock",
-                                    type: "bytes32",
-                                    internalType: "bytes32",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "taker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "token",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "amount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "safetyDeposit",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "timelocks",
-                                    type: "uint256",
-                                    internalType: "Timelocks",
-                                },
-                            ],
-                        },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getOrder",
-                    inputs: [
-                        {
-                            name: "extensionsHash",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "maker",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "token",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "mockTakerToken",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "makeAmount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                    ],
-                    outputs: [
-                        {
-                            name: "",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getOrderAndHash",
-                    inputs: [
-                        {
-                            name: "extensionsHash",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "maker",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "token",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "mockTakerToken",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "makeAmount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                    ],
-                    outputs: [
-                        {
-                            name: "",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                        { name: "", type: "bytes32", internalType: "bytes32" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getOrderHash",
-                    inputs: [
-                        {
-                            name: "order",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "bytes32", internalType: "bytes32" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getPermitDigest",
-                    inputs: [
-                        {
-                            name: "token",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "owner",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "spender",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "value",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "deadline",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "bytes32", internalType: "bytes32" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "getTakingAmount",
-                    inputs: [
-                        {
-                            name: "order",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                        {
-                            name: "extension",
-                            type: "bytes",
-                            internalType: "bytes",
-                        },
-                        {
-                            name: "orderHash",
-                            type: "bytes32",
-                            internalType: "bytes32",
-                        },
-                        {
-                            name: "taker",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "makingAmount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "remainingMakingAmount",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "extraData",
-                            type: "bytes",
-                            internalType: "bytes",
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "uint256", internalType: "uint256" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "isValidOrderSig",
-                    inputs: [
-                        {
-                            name: "order",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                        { name: "v", type: "uint8", internalType: "uint8" },
-                        { name: "r", type: "bytes32", internalType: "bytes32" },
-                        { name: "s", type: "bytes32", internalType: "bytes32" },
-                        {
-                            name: "signer",
-                            type: "address",
-                            internalType: "address",
-                        },
-                    ],
-                    outputs: [{ name: "", type: "bool", internalType: "bool" }],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "owner",
-                    inputs: [],
-                    outputs: [
-                        { name: "", type: "address", internalType: "address" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "packSig",
-                    inputs: [
-                        { name: "v", type: "uint8", internalType: "uint8" },
-                        { name: "r", type: "bytes32", internalType: "bytes32" },
-                        { name: "s", type: "bytes32", internalType: "bytes32" },
-                        {
-                            name: "token",
-                            type: "address",
-                            internalType: "address",
-                        },
-                        {
-                            name: "value",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                        {
-                            name: "deadline",
-                            type: "uint256",
-                            internalType: "uint256",
-                        },
-                    ],
-                    outputs: [
-                        { name: "", type: "bytes", internalType: "bytes" },
-                    ],
-                    stateMutability: "view",
-                },
-                {
-                    type: "function",
-                    name: "renounceOwnership",
-                    inputs: [],
-                    outputs: [],
-                    stateMutability: "nonpayable",
-                },
-                {
-                    type: "function",
-                    name: "testOrder",
-                    inputs: [
-                        {
-                            name: "order",
-                            type: "tuple",
-                            internalType: "struct IOrderMixin.Order",
-                            components: [
-                                {
-                                    name: "salt",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "maker",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "receiver",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "takerAsset",
-                                    type: "uint256",
-                                    internalType: "Address",
-                                },
-                                {
-                                    name: "makingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "takingAmount",
-                                    type: "uint256",
-                                    internalType: "uint256",
-                                },
-                                {
-                                    name: "makerTraits",
-                                    type: "uint256",
-                                    internalType: "MakerTraits",
-                                },
-                            ],
-                        },
-                        { name: "v", type: "uint8", internalType: "uint8" },
-                        { name: "r", type: "bytes32", internalType: "bytes32" },
-                        { name: "s", type: "bytes32", internalType: "bytes32" },
-                    ],
-                    outputs: [],
-                    stateMutability: "nonpayable",
-                },
-                {
-                    type: "function",
-                    name: "transferOwnership",
-                    inputs: [
-                        {
-                            name: "newOwner",
-                            type: "address",
-                            internalType: "address",
-                        },
-                    ],
-                    outputs: [],
-                    stateMutability: "nonpayable",
-                },
-                {
-                    type: "event",
-                    name: "OwnershipTransferred",
-                    inputs: [
-                        {
-                            name: "previousOwner",
-                            type: "address",
-                            indexed: true,
-                            internalType: "address",
-                        },
-                        {
-                            name: "newOwner",
-                            type: "address",
-                            indexed: true,
-                            internalType: "address",
-                        },
-                    ],
-                    anonymous: false,
-                },
-                {
-                    type: "error",
-                    name: "OwnableInvalidOwner",
-                    inputs: [
-                        {
-                            name: "owner",
-                            type: "address",
-                            internalType: "address",
-                        },
-                    ],
-                },
-                {
-                    type: "error",
-                    name: "OwnableUnauthorizedAccount",
-                    inputs: [
-                        {
-                            name: "account",
-                            type: "address",
-                            internalType: "address",
-                        },
-                    ],
-                },
+                    "name": "initialOwner",
+                    "type": "address",
+                    "internalType": "address"
+                }
             ],
+            "stateMutability": "nonpayable"
+        },
+        { "type": "receive", "stateMutability": "payable" },
+        {
+            "type": "function",
+            "name": "deploySrc",
+            "inputs": [
+                {
+                    "name": "order",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                },
+                { "name": "v", "type": "uint8", "internalType": "uint8" },
+                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
+                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
+                {
+                    "name": "immutables",
+                    "type": "tuple",
+                    "internalType": "struct IBaseEscrow.Immutables",
+                    "components": [
+                        {
+                            "name": "orderHash",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "hashlock",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "taker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "token",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "amount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "safetyDeposit",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "timelocks",
+                            "type": "uint256",
+                            "internalType": "Timelocks"
+                        }
+                    ]
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                { "name": "permit", "type": "bytes", "internalType": "bytes" },
+                {
+                    "name": "extraDataArgs",
+                    "type": "tuple",
+                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
+                    "components": [
+                        {
+                            "name": "hashlockInfo",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "dstChainId",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "dstToken",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "deposits",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "timelocks",
+                            "type": "uint256",
+                            "internalType": "Timelocks"
+                        }
+                    ]
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "address", "internalType": "address" }
+            ],
+            "stateMutability": "payable"
+        },
+        {
+            "type": "function",
+            "name": "getDefaultTimelock",
+            "inputs": [
+                {
+                    "name": "srcWithdrawalDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "srcPublicWithdrawalDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "srcCancellationDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "srcPublicCancellationDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "dstWithdrawalDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "dstPublicWithdrawalDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                },
+                {
+                    "name": "dstCancellationDelay",
+                    "type": "uint32",
+                    "internalType": "uint32"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "uint256", "internalType": "Timelocks" }
+            ],
+            "stateMutability": "pure"
+        },
+        {
+            "type": "function",
+            "name": "getEscrowAddress",
+            "inputs": [
+                {
+                    "name": "orderHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "address", "internalType": "address" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getExtensions",
+            "inputs": [
+                {
+                    "name": "extraDataArgs",
+                    "type": "tuple",
+                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
+                    "components": [
+                        {
+                            "name": "hashlockInfo",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "dstChainId",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "dstToken",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "deposits",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "timelocks",
+                            "type": "uint256",
+                            "internalType": "Timelocks"
+                        }
+                    ]
+                },
+                { "name": "permit", "type": "bytes", "internalType": "bytes" }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes", "internalType": "bytes" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getExtensionsHash",
+            "inputs": [
+                {
+                    "name": "extensions",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes32", "internalType": "bytes32" }
+            ],
+            "stateMutability": "pure"
+        },
+        {
+            "type": "function",
+            "name": "getExtraDataArgs",
+            "inputs": [
+                {
+                    "name": "hashlockInfo",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "timelocks",
+                    "type": "uint256",
+                    "internalType": "Timelocks"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "tuple",
+                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
+                    "components": [
+                        {
+                            "name": "hashlockInfo",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "dstChainId",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "dstToken",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "deposits",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "timelocks",
+                            "type": "uint256",
+                            "internalType": "Timelocks"
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "pure"
+        },
+        {
+            "type": "function",
+            "name": "getImmutables",
+            "inputs": [
+                {
+                    "name": "orderHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "hashlock",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "maker",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "timelocks",
+                    "type": "uint256",
+                    "internalType": "Timelocks"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "tuple",
+                    "internalType": "struct IBaseEscrow.Immutables",
+                    "components": [
+                        {
+                            "name": "orderHash",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "hashlock",
+                            "type": "bytes32",
+                            "internalType": "bytes32"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "taker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "token",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "amount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "safetyDeposit",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "timelocks",
+                            "type": "uint256",
+                            "internalType": "Timelocks"
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getOrder",
+            "inputs": [
+                {
+                    "name": "extensionsHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "maker",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "mockTakerToken",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "makeAmount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getOrderAndHash",
+            "inputs": [
+                {
+                    "name": "extensionsHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "maker",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "mockTakerToken",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "makeAmount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                },
+                { "name": "", "type": "bytes32", "internalType": "bytes32" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getOrderHash",
+            "inputs": [
+                {
+                    "name": "order",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes32", "internalType": "bytes32" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getOrderHashLocal",
+            "inputs": [
+                {
+                    "name": "order",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes32", "internalType": "bytes32" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getPermitDigest",
+            "inputs": [
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "owner",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "spender",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "value",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes32", "internalType": "bytes32" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "getTakingAmount",
+            "inputs": [
+                {
+                    "name": "order",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                },
+                {
+                    "name": "extension",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                },
+                {
+                    "name": "orderHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "taker",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "makingAmount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "remainingMakingAmount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "extraData",
+                    "type": "bytes",
+                    "internalType": "bytes"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "uint256", "internalType": "uint256" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "isValidOrderSig",
+            "inputs": [
+                {
+                    "name": "order",
+                    "type": "tuple",
+                    "internalType": "struct IOrderMixin.Order",
+                    "components": [
+                        {
+                            "name": "salt",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "maker",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "receiver",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "takerAsset",
+                            "type": "uint256",
+                            "internalType": "Address"
+                        },
+                        {
+                            "name": "makingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "takingAmount",
+                            "type": "uint256",
+                            "internalType": "uint256"
+                        },
+                        {
+                            "name": "makerTraits",
+                            "type": "uint256",
+                            "internalType": "MakerTraits"
+                        }
+                    ]
+                },
+                { "name": "v", "type": "uint8", "internalType": "uint8" },
+                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
+                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
+                {
+                    "name": "signer",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "owner",
+            "inputs": [],
+            "outputs": [
+                { "name": "", "type": "address", "internalType": "address" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "packSig",
+            "inputs": [
+                { "name": "v", "type": "uint8", "internalType": "uint8" },
+                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
+                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "value",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "bytes", "internalType": "bytes" }
+            ],
+            "stateMutability": "view"
+        },
+        {
+            "type": "function",
+            "name": "renounceOwnership",
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "transferOwnership",
+            "inputs": [
+                {
+                    "name": "newOwner",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "function",
+            "name": "withdraw",
+            "inputs": [
+                {
+                    "name": "secret",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "escrow",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "nonpayable"
+        },
+        {
+            "type": "event",
+            "name": "EscrowCreated",
+            "inputs": [
+                {
+                    "name": "escrow",
+                    "type": "address",
+                    "indexed": false,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "event",
+            "name": "OwnershipTransferred",
+            "inputs": [
+                {
+                    "name": "previousOwner",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                },
+                {
+                    "name": "newOwner",
+                    "type": "address",
+                    "indexed": true,
+                    "internalType": "address"
+                }
+            ],
+            "anonymous": false
+        },
+        {
+            "type": "error",
+            "name": "OwnableInvalidOwner",
+            "inputs": [
+                {
+                    "name": "owner",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ]
+        },
+        {
+            "type": "error",
+            "name": "OwnableUnauthorizedAccount",
+            "inputs": [
+                {
+                    "name": "account",
+                    "type": "address",
+                    "internalType": "address"
+                }
+            ]
+        }
+    ],
             this.transactionSigner // Transaction signer calls the resolver
         );
     }
@@ -1494,18 +1522,18 @@ class ResolverManager {
                 this.transactionSigner.address
             );
             console.log("👤 Order maker:", params.makerAddress);
-
+            const secret = ethers.keccak256(params.secret);
             // Step 1: Generate hashlock from secret
-            const hashlock = ethers.keccak256(params.secret);
+            const hashlock = ethers.keccak256(secret);
             console.log("🔒 Hashlock generated:", hashlock);
 
             // Step 2: Get default timelock
             const delays = params.timeDelays || {
-                srcWithdrawalDelay: 5 * 60,
+                srcWithdrawalDelay: 10,
                 srcPublicWithdrawalDelay: 10 * 60,
                 srcCancellationDelay: 15 * 60,
                 srcPublicCancellationDelay: 20 * 60,
-                dstWithdrawalDelay: 5 * 60,
+                dstWithdrawalDelay: 10,
                 dstPublicWithdrawalDelay: 10 * 60,
                 dstCancellationDelay: 15 * 60,
             };
@@ -1557,8 +1585,6 @@ class ResolverManager {
             console.log("Extensions data:", extensionsT);
 
             // Step 6: Get extensions hash and create order
-            // const extensionsHash = await this.resolver.getExtensionsHash(
-            //     extensions)
             const extensionsHash = ethers.keccak256(extensions);
 
             console.log("Extensions hash:", extensionsHash);
@@ -1654,12 +1680,23 @@ class ResolverManager {
 
             console.log("⏳ Transaction submitted:", tx.hash);
             const receipt = await tx.wait();
-            console.log("✅ Transaction confirmed!");
+            console.log("✅ Transaction confirmed!", receipt);
 
-            // Extract escrow address from return value or events
-            const escrowAddress =
-                receipt.logs[0]?.address ||
-                "0x0000000000000000000000000000000000000000";
+            const escrowAddress: string = await this.resolver.getEscrowAddress(orderHash);
+            console.log("Escrow address:", escrowAddress);
+            // Wait for 6 seconds to ensure the contract is deployed
+            await new Promise((resolve) => setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000));
+            // Call withdraw 
+
+            await this.resolver.withdraw(
+                secret, // The secret used to create the hashlock
+                escrowAddress, // The escrow address returned from deploySrc
+                {
+                    // value: params.safetyDeposit || 0n,
+                    gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
+                    gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+                },
+            );  
 
             return {
                 escrowAddress,
