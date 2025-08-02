@@ -9,7 +9,7 @@ Ts
 - [x] Create order on aptos 
 - [x] Create escrow src on aptos
 - [x] Claim escrow on aptos
-- [_] Create escrow dst on aptos
+- [x] Create escrow dst on aptos
 
 - [x] Create escrow src on eth
 - [x] Claim escrow on eth
@@ -17,7 +17,7 @@ Ts
 
 - [_] Update to allow multi fill orders 
 
-- [_] Improve aptos design
+- [_] Improve aptos design (pre deposit to order)
 
 - [_] Fix tests on aptos
 - [_] Clean up aptos and eth code

@@ -5,7 +5,7 @@ script {
         Object,
         ConstructorRef,
         create_named_object,
-        object_from_constructor_ref,
+        object_from_constructor_ref
     };
     use aptos_framework::primary_fungible_store::{Self, deposit};
     use aptos_framework::fungible_asset::{Self, Metadata, generate_mint_ref, mint};
@@ -14,13 +14,13 @@ script {
     use std::option;
     use aptos_std::signer;
     use aptos_std::base16;
-    
 
     entry fun main(account: &signer) {
         // Addresses for the relay and user, replace with addresses you want to use
-        let relay_addr = @0x50fb544445622bee716f1a50c93ea72fe18525ac7f18daa617ff6d74a28f9f93;
-        let user_addr = @0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1;
-
+        let relay_addr =
+            @0x50fb544445622bee716f1a50c93ea72fe18525ac7f18daa617ff6d74a28f9f93;
+        let user_addr =
+            @0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1;
 
         // Create Incentive Token
         let incentive_constructor_ref = &create_named_object(account, b"IncentiveCoin");
@@ -33,7 +33,8 @@ script {
             string::utf8(b""),
             string::utf8(b"")
         );
-        let incentive_metadata: Object<Metadata> = object_from_constructor_ref<Metadata>(incentive_constructor_ref);
+        let incentive_metadata: Object<Metadata> =
+            object_from_constructor_ref<Metadata>(incentive_constructor_ref);
 
         // Create Deposit Token
         let deposit_constructor_ref = &create_named_object(account, b"DepositCoin");
@@ -46,7 +47,8 @@ script {
             string::utf8(b""),
             string::utf8(b"")
         );
-        let deposit_metadata: Object<Metadata> = object_from_constructor_ref<Metadata>(deposit_constructor_ref);
+        let deposit_metadata: Object<Metadata> =
+            object_from_constructor_ref<Metadata>(deposit_constructor_ref);
 
         let my_addr = signer::address_of(account);
 
@@ -80,7 +82,6 @@ script {
     }
 }
 
-
 script {
     use escrow_factory::order_factory;
     use aptos_framework::object::{
@@ -100,15 +101,18 @@ script {
     use std::vector;
     use aptos_std::base16;
 
-
-
     entry fun create_order(account: &signer) {
-        let incentive_token_address = @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
-        let deposit_token_address = @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
-        let factory_address = @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
+        let incentive_token_address =
+            @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
+        let deposit_token_address =
+            @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
+        let factory_address =
+            @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
 
-        let deposit_token_asset_metadata =  address_to_object<Metadata>(deposit_token_address);
-        let incentive_fee_asset_metadata = address_to_object<Metadata>(incentive_token_address);
+        let deposit_token_asset_metadata =
+            address_to_object<Metadata>(deposit_token_address);
+        let incentive_fee_asset_metadata =
+            address_to_object<Metadata>(incentive_token_address);
 
         // Order parameters (edit as needed)
         let recover_incentive_fee = 10;
@@ -117,7 +121,8 @@ script {
         let min_incentive_fee = 10;
         let salt = b"my_salt_3";
         let hashlock = b"my_hashlock";
-        let hashlock = x"9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658";
+        let hashlock =
+            x"9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658";
         let allow_multi_fill = true;
         let whitelisted_addresses = vector::empty<address>();
         let withdraw_period = 10;
@@ -165,22 +170,26 @@ script {
     use std::vector;
     use aptos_std::base16;
 
-
-
     entry fun create_src(account: &signer) {
-        let order_address = @0x879c886f03d197e18001f23cbd51b611f0e5cf35564a83536e226615ba089ccc; // <-- FILL IN with the order's resource account address
-        let incentive_token_address = @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
-        let deposit_token_address = @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
-        let factory_address = @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
+        let order_address =
+            @0x879c886f03d197e18001f23cbd51b611f0e5cf35564a83536e226615ba089ccc; // <-- FILL IN with the order's resource account address
+        let incentive_token_address =
+            @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
+        let deposit_token_address =
+            @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
+        let factory_address =
+            @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
 
-        let deposit_token_asset_metadata =  address_to_object<Metadata>(deposit_token_address);
-        let incentive_fee_asset_metadata = address_to_object<Metadata>(incentive_token_address);
-
+        let deposit_token_asset_metadata =
+            address_to_object<Metadata>(deposit_token_address);
+        let incentive_fee_asset_metadata =
+            address_to_object<Metadata>(incentive_token_address);
 
         // Escrow parameters
         let make_amount = 100; // Amount to escrow (must be ≤ order.deposit_amount)
         let incentive_fee = 12; // Must be > order.min_incentive_fee
-        let receiver = @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52; // <-- FILL IN with the receiver's address
+        let receiver =
+            @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52; // <-- FILL IN with the receiver's address
         let salt = b"my_escrow_salt_3"; // Unique salt per escrow
 
         order_factory::create_escrow_src<Metadata, Metadata>(
@@ -195,7 +204,6 @@ script {
         );
     }
 }
-
 
 script {
     use escrow_factory::order_factory;
@@ -216,23 +224,28 @@ script {
     use std::vector;
     use aptos_std::base16;
 
-
-
     entry fun withdraw(account: &signer) {
-        let escrow_address = @0xca57a416b42643ce2d739be39cdc55d7104891d447e0ae63cb1ebf04d33c917e;
-        let factory_address = @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
-        let incentive_token_address = @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
-        let deposit_token_address = @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
+        let escrow_address =
+            @0xca57a416b42643ce2d739be39cdc55d7104891d447e0ae63cb1ebf04d33c917e;
+        let factory_address =
+            @0xe6727f9d55fa8f220cc4735507b709eaa80b569de07bce38d03c305027554c52;
+        let incentive_token_address =
+            @0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d;
+        let deposit_token_address =
+            @0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e;
 
-        let deposit_token_asset_metadata =  address_to_object<Metadata>(deposit_token_address);
-        let incentive_fee_asset_metadata = address_to_object<Metadata>(incentive_token_address);
-
+        let deposit_token_asset_metadata =
+            address_to_object<Metadata>(deposit_token_address);
+        let incentive_fee_asset_metadata =
+            address_to_object<Metadata>(incentive_token_address);
 
         // The secret that unlocks the hashlock (must match what was used to create the escrow)
         let secret = b"test"; // or use x"..." for hex
 
-        let deposit_token_asset_metadata = address_to_object<Metadata>(deposit_token_address);
-        let incentive_fee_asset_metadata = address_to_object<Metadata>(incentive_token_address);
+        let deposit_token_asset_metadata =
+            address_to_object<Metadata>(deposit_token_address);
+        let incentive_fee_asset_metadata =
+            address_to_object<Metadata>(incentive_token_address);
 
         order_factory::withdraw<Metadata, Metadata>(
             account,

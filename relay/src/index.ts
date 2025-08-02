@@ -155,6 +155,140 @@ class AptosOrderManager {
         }
     }
 
+    async createEscrowDst(params: {
+        order_hash: Uint8Array;
+        incentive_feeAssetMetadata: string;
+        depositAssetMetadata: string;
+        deposit_amount: number;
+        incentive_fee: number;
+        hashlock: Uint8Array;
+        withDrawPeriod: number;
+        publicWithDrawPeriod: number;
+        cancelPeriod: number;
+        publicCancelPeriod: number;
+    }): Promise<{ transactionHash: string; escrowAddress: string }> {
+        try {
+            console.log("Creating escrow dst transaction...");
+            console.log(
+                "User account:",
+                this.userAccount.accountAddress.toString()
+            );
+            console.log(
+                "Relay account:",
+                this.relayAccount.accountAddress.toString()
+            );
+
+            // Build the transaction payload
+            const payload: InputEntryFunctionData = {
+                function: `${this.moduleAddress}::order_factory::create_escrow_dst`,
+                typeArguments: [
+                    "0x1::fungible_asset::Metadata", // M type for incentive fee asset
+                    "0x1::fungible_asset::Metadata", // N type for deposit asset
+                ],
+                functionArguments: [
+                    Array.from(params.order_hash),
+                    this.userAccount.accountAddress,
+                    params.incentive_feeAssetMetadata,
+                    params.depositAssetMetadata,
+                    params.deposit_amount,
+                    params.incentive_fee,
+                    Array.from(this.generateSalt()),
+                    Array.from(params.hashlock),
+                    params.withDrawPeriod,
+                    params.publicWithDrawPeriod,
+                    params.cancelPeriod,
+                    params.publicCancelPeriod,
+                ],
+            };
+
+            // functionArguments: [
+            //         params.depositAssetMetadata,
+            //         params.incentive_feeAssetMetadata,
+            //         params.recover_incentive_fee,
+            //         params.recoverPeriod,
+            //         params.deposit_amount,
+            //         params.min_incentive_fee,
+            //         Array.from(this.generateSalt()), // Generate salt if not provided
+            //         Array.from(params.hashlock),
+            //         params.allow_multi_fill,
+            //         params.whitelisted_addresses,
+            //         params.withDrawPeriod,
+            //         params.publicWithDrawPeriod,
+            //         params.cancelPeriod,
+            //         params.publicCancelPeriod,
+            //     ],
+            // Build the multi-agent transaction
+            const transaction = await this.aptos.transaction.build.simple({
+                sender: this.relayAccount.accountAddress,
+                data: payload,
+            });
+
+            // Sign the transaction with both accounts
+            const relayAuthenticator = this.aptos.transaction.sign({
+                signer: this.relayAccount,
+                transaction,
+            });
+
+            // Submit the multi-agent transaction
+            const committedTransaction =
+                await this.aptos.transaction.submit.simple({
+                    transaction,
+                    senderAuthenticator: relayAuthenticator,
+                });
+
+            console.log("Transaction submitted successfully!");
+            console.log("Transaction hash:", committedTransaction.hash);
+
+            // Wait for transaction confirmation
+            const executedTransaction = await this.aptos.waitForTransaction({
+                transactionHash: committedTransaction.hash,
+            });
+
+            // Extract escrow address from emitted events
+            const escrowAddress =
+                this.extractDSTEscrowAddress(executedTransaction);
+
+            console.log("Escrow dst created successfully!");
+            console.log("Transaction hash:", executedTransaction.hash);
+            console.log("Escrow address:", escrowAddress);
+
+            return {
+                transactionHash: executedTransaction.hash,
+                escrowAddress: escrowAddress,
+            };
+        } catch (error) {
+            console.error("Error creating escrow dst:", error);
+            throw error;
+        }
+    }
+
+    private extractDSTEscrowAddress(transaction: any): string {
+        try {
+            // Look for the EscrowCreatedEvent in the transaction events
+            const escrowCreatedEvent = transaction.events?.find((event: any) =>
+                event.type.includes("EscrowDstCreatedEvent")
+            );
+
+            if (!escrowCreatedEvent) {
+                throw new Error(
+                    "EscrowCreatedEvent not found in transaction events"
+                );
+            }
+
+            // Extract the escrow_address from the event data
+            const escrowAddress = escrowCreatedEvent.data.escrow_address;
+
+            if (!escrowAddress) {
+                throw new Error("escrow_address not found in event data");
+            }
+
+            return escrowAddress;
+        } catch (error) {
+            console.error("Error extracting escrow address:", error);
+            throw new Error(`Failed to extract escrow address: ${error}`);
+        }
+    }
+
     private extractOrderAddress(transaction: any): string {
         try {
             // Look for the OrderCreatedEvent in the transaction events
@@ -432,6 +566,44 @@ class ResolverManager {
         { "type": "receive", "stateMutability": "payable" },
         {
             "type": "function",
+            "name": "deployDst",
+            "inputs": [
+                {
+                    "name": "orderHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "hashlock",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                },
+                {
+                    "name": "token",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "maker",
+                    "type": "address",
+                    "internalType": "address"
+                },
+                {
+                    "name": "amount",
+                    "type": "uint256",
+                    "internalType": "uint256"
+                },
+                {
+                    "name": "timelocks",
+                    "type": "uint256",
+                    "internalType": "Timelocks"
+                }
+            ],
+            "outputs": [],
+            "stateMutability": "payable"
+        },
+        {
+            "type": "function",
             "name": "deploySrc",
             "inputs": [
                 {
@@ -619,6 +791,21 @@ class ResolverManager {
                 { "name": "", "type": "uint256", "internalType": "Timelocks" }
             ],
             "stateMutability": "pure"
+        },
+        {
+            "type": "function",
+            "name": "getDstAddress",
+            "inputs": [
+                {
+                    "name": "orderHash",
+                    "type": "bytes32",
+                    "internalType": "bytes32"
+                }
+            ],
+            "outputs": [
+                { "name": "", "type": "address", "internalType": "address" }
+            ],
+            "stateMutability": "view"
         },
         {
             "type": "function",
@@ -1462,13 +1649,15 @@ class ResolverManager {
 
         // Create SigningKey and sign the RAW hash (no prefix)
         const signingKey = new SigningKey(ownerPrivateKey);
-        const {v, r, s} = signingKey.sign(permitDigest); // ✅ Signs raw hash
+        const { v, r, s } = signingKey.sign(permitDigest); // ✅ Signs raw hash
 
         // Convert to compact format
 
         // const sig = ethers.Signature.from(signature);
         const compactSig = await this.resolver.packSig(
-            v,r,s,
+            v,
+            r,
+            s,
             tokenAddress,
             value,
             deadline
@@ -1496,6 +1685,87 @@ class ResolverManager {
             v: signature.v, // Recovery ID (27 or 28)
             r: signature.r, // First 32 bytes of signature
             s: signature.s, // Second 32 bytes of signature
+        };
+    }
+
+    async deployDst(params: {
+        orderHash: Uint8Array;
+        secret: Uint8Array;
+        amount: bigint;
+        makerAddress: string,
+        timeDelays?: {
+            srcWithdrawalDelay: number;
+            srcPublicWithdrawalDelay: number;
+            srcCancellationDelay: number;
+            srcPublicCancellationDelay: number;
+            dstWithdrawalDelay: number;
+            dstPublicWithdrawalDelay: number;
+            dstCancellationDelay: number;
+        };
+    }): Promise<{ escrowAddress: string; transactionHash: string }> {
+        const hashlock = ethers.keccak256(params.secret);
+        console.log("🔒 Hashlock generated:", hashlock);
+        const delays = params.timeDelays || {
+            srcWithdrawalDelay: 10,
+            srcPublicWithdrawalDelay: 10 * 60,
+            srcCancellationDelay: 15 * 60,
+            srcPublicCancellationDelay: 20 * 60,
+            dstWithdrawalDelay: 10,
+            dstPublicWithdrawalDelay: 10 * 60,
+            dstCancellationDelay: 15 * 60,
+        };
+
+        const timelocks = await this.resolver.getDefaultTimelock(
+            delays.srcWithdrawalDelay,
+            delays.srcPublicWithdrawalDelay,
+            delays.srcCancellationDelay,
+            delays.srcPublicCancellationDelay,
+            delays.dstWithdrawalDelay,
+            delays.dstPublicWithdrawalDelay,
+            delays.dstCancellationDelay
+        );
+
+        const tx = await this.resolver.deployDst(
+            params.orderHash,
+            hashlock, // The hashlock generated from the secret
+            this.addresses.token,
+            params.makerAddress,
+            params.amount,
+            timelocks,
+            {
+                // value: params.safetyDeposit || 0n,
+                gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
+                gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+            }
+        );
+        const receipt = await tx.wait();
+
+        const escrowAddress: string = await this.resolver.getDstAddress(
+            params.orderHash
+        );
+
+        console.log("✅ Dst escrow deployed at:", escrowAddress);
+
+        // Sleep for wait time plus a second
+        // Wait for 6 seconds to ensure the contract is deployed
+        await new Promise((resolve) =>
+            setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
+        );
+        // Call withdraw
+
+        await this.resolver.withdraw(
+            params.secret, // The secret used to create the hashlock
+            escrowAddress, // The escrow address returned from deploySrc
+            {
+                // value: params.safetyDeposit || 0n,
+                gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
+                gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+            }
+        );
+
+        return {
+            escrowAddress,
+            transactionHash: receipt.transactionHash,
         };
     }
 
@@ -1575,9 +1845,7 @@ class ResolverManager {
 
             // Step 5: Get extensions
             const extensionsT = await this.resolver.getExtensions(
-                [
-                    ...extraDataArgs
-                ],
+                [...extraDataArgs],
                 permit
             );
             const extensions = extensionsT;
@@ -1668,9 +1936,7 @@ class ResolverManager {
                 [...immutables],
                 params.makeAmount,
                 permit,
-                [
-                    ...extraDataArgs
-                ],
+                [...extraDataArgs],
                 {
                     // value: params.safetyDeposit || 0n,
                     gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
@@ -1682,11 +1948,15 @@ class ResolverManager {
             const receipt = await tx.wait();
             console.log("✅ Transaction confirmed!", receipt);
 
-            const escrowAddress: string = await this.resolver.getEscrowAddress(orderHash);
+            const escrowAddress: string = await this.resolver.getEscrowAddress(
+                orderHash
+            );
             console.log("Escrow address:", escrowAddress);
             // Wait for 6 seconds to ensure the contract is deployed
-            await new Promise((resolve) => setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000));
-            // Call withdraw 
+            await new Promise((resolve) =>
+                setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
+            );
+            // Call withdraw
 
             await this.resolver.withdraw(
                 secret, // The secret used to create the hashlock
@@ -1695,8 +1965,8 @@ class ResolverManager {
                     // value: params.safetyDeposit || 0n,
                     gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
                     gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
-                },
-            );  
+                }
+            );
 
             return {
                 escrowAddress,
@@ -1724,13 +1994,17 @@ function hashSecretWithEthers(secret: Uint8Array): Uint8Array {
 // Example usage
 async function main() {
     try {
+        // =======================================================
+        // ======================= APT SRC =======================
+        // =======================================================
+
         // const orderManager = new AptosOrderManager();
 
-        // // Check account balances first
+        // // // Check account balances first
         // await orderManager.checkAccountBalances();
 
         // // Random secret bytes of length 32
-        const secret = new Uint8Array(32);
+        // const secret = new Uint8Array(32);
         // crypto.getRandomValues(secret);
         // // Hash the secret using keccak256
         // const hashlock = hashSecretWithEthers(secret);
@@ -1800,6 +2074,111 @@ async function main() {
         // );
         // console.log("Assets withdrawn successfully!");
 
+        // =======================================================
+        // ======================= APT DST =======================
+        // =======================================================
+
+        // const orderManager = new AptosOrderManager();
+
+        // // // Check account balances first
+        // await orderManager.checkAccountBalances();
+
+        // // Random secret bytes of length 32
+        // const secret = new Uint8Array(32);
+        // crypto.getRandomValues(secret);
+        // // Hash the secret using keccak256
+        // const hashlock = hashSecretWithEthers(secret);
+        // const withdrawPeriod = 1; // 6 seconds for testing
+        // // Example order parameters
+        // const escrowParams = {
+        //     order_hash: new Uint8Array(32), // Replace with actual order hash
+        //     depositAssetMetadata:
+        //         "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
+        //     incentive_feeAssetMetadata:
+        //         "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e",
+        //     deposit_amount: 1000,
+        //     incentive_fee: 10,
+        //     hashlock: hashlock,
+        //     withDrawPeriod: withdrawPeriod,
+        //     publicWithDrawPeriod: 7200,
+        //     cancelPeriod: 86400,
+        //     publicCancelPeriod: 172800,
+        // };
+        // const escrowResult = await orderManager.createEscrowDst(escrowParams);
+
+        // console.log("Escrow created:", escrowResult.escrowAddress);
+        // //  Wait for 6 seconds before withdrawing assets
+        // console.log("\n=== Withdrawing Assets ===");
+        // await new Promise((resolve) =>
+        //     setTimeout(resolve, withdrawPeriod * 1000 + 1000)
+        // );
+        // const withdrawParams = {
+        //     escrowAddress: escrowResult.escrowAddress,
+        //     secret: secret, // The same secret used to create the order hashlock
+        //     incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
+        //     depositAssetMetadata: escrowParams.depositAssetMetadata,
+        // };
+
+        // const withdrawResult = await orderManager.withdrawAssets(
+        //     withdrawParams
+        // );
+        // console.log("Assets withdrawn successfully!");
+
+        // =======================================================
+        // ======================= ETH SRC =======================
+        // =======================================================
+
+        // const transactionSignerPrivateKey =
+        //     process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
+        // const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
+        // const makerAddress = process.env.MAKER_ADDRESS!;
+
+        // // Initialize resolver manager with transaction signer
+        // const resolverManager = new ResolverManager(
+        //     transactionSignerPrivateKey
+        // );
+
+        // // Check balances
+        // const transactionSignerBalance = await resolverManager.checkBalance(
+        //     resolverManager.transactionSigner.address
+        // );
+        // console.log(
+        //     "Transaction Signer Balance:",
+        //     transactionSignerBalance,
+        //     "ETH"
+        // );
+
+        // // Deploy source escrow
+        // const deployParams = {
+        //     secret: secret,
+        //     makerAddress: makerAddress, // Maker's address
+        //     makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
+        //     makeAmount: BigInt("1000000000"), // 1 ETH in wei
+        //     safetyDeposit: BigInt("0"), // 0.1 ETH in wei
+        // };
+
+        // console.log("🚀 Deploying source escrow...");
+        // console.log(
+        //     "📝 Transaction will be sent by:",
+        //     resolverManager.transactionSigner.address
+        // );
+        // console.log("👤 Order will be signed by:", makerAddress);
+
+        // const result = await resolverManager.deploySrc(deployParams);
+
+        // console.log("✅ Source escrow deployed successfully!");
+        // console.log("📍 Escrow Address:", result.escrowAddress);
+        // console.log("🔗 Transaction Hash:", result.transactionHash);
+
+        // =======================================================
+        // ======================= ETH DST =======================
+        // =======================================================
+
+        const secret = new Uint8Array(32);
+        crypto.getRandomValues(secret);
+        // Hash the secret using keccak256
+        const hashlock = hashSecretWithEthers(secret);
+
         const transactionSignerPrivateKey =
             process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
         const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
@@ -1820,27 +2199,26 @@ async function main() {
             "ETH"
         );
 
-        // Deploy source escrow
+        // Deploy destination escrow
+        const orderHash = new Uint8Array(32);
+        crypto.getRandomValues(orderHash);
         const deployParams = {
-            secret: secret,
+            orderHash: orderHash, // Use a random order hash for testing
+            secret: secret, // The secret used to create the hashlock
+            amount: BigInt("1000000"), // 1 ETH in wei
             makerAddress: makerAddress, // Maker's address
-            makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
-            makeAmount: BigInt("1000000000"), // 1 ETH in wei
-            safetyDeposit: BigInt("0"), // 0.1 ETH in wei
+            timeDelays: {
+                srcWithdrawalDelay: 10,
+                srcPublicWithdrawalDelay: 10 * 60,
+                srcCancellationDelay: 15 * 60,
+                srcPublicCancellationDelay: 20 * 60,
+                dstWithdrawalDelay: 10,
+                dstPublicWithdrawalDelay: 10 * 60,
+                dstCancellationDelay: 15 * 60,
+            },
         };
-
-        console.log("🚀 Deploying source escrow...");
-        console.log(
-            "📝 Transaction will be sent by:",
-            resolverManager.transactionSigner.address
-        );
-        console.log("👤 Order will be signed by:", makerAddress);
-
-        const result = await resolverManager.deploySrc(deployParams);
-
-        console.log("✅ Source escrow deployed successfully!");
-        console.log("📍 Escrow Address:", result.escrowAddress);
-        console.log("🔗 Transaction Hash:", result.transactionHash);
+        const { escrowAddress, transactionHash } =
+            await resolverManager.deployDst(deployParams);
     } catch (error) {
         console.error("Failed to create order:", error);
         process.exit(1);

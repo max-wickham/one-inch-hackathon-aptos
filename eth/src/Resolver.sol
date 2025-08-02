@@ -8,7 +8,6 @@ import {MakerTraitsLib, MakerTraits} from "./libs/MakerTraitsLib.sol";
 import {IOrderMixin, IBaseEscrow, IBaseExtension, IEscrowFactory, Timelocks, Address} from "./OneInchInterfaces.sol";
 import {ERC20Permit} from "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-// import "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 interface IResolver {
     function getOrderHashLocal(
@@ -16,14 +15,24 @@ interface IResolver {
     ) external view returns (bytes32);
 }
 
+/**
+Basic Mock Resolver for testing FusionPlus Escrow Creation. 
+Note that this is a simply a test implementation with utility functions to make creation of
+orders easier.
+ */
 contract Resolver is Ownable {
-    // using SafeERC20 for IERC20;
-
     using TakerTraitsLib for TakerTraits;
     using ExtensionsLib for bytes;
 
     address private immutable _LOP;
     address private immutable _Factory;
+
+    // Mapping to store nonces for each maker address
+    mapping (address => uint) private _nonces;
+    // Mapping to store immutables for each escrow address
+    mapping(address => IBaseEscrow.Immutables) private _immutables;
+    // Mapping to store order hash to escrow address
+    mapping(bytes32 => address) _orderHashToEscrow;
 
     constructor(
         address lop,
@@ -40,8 +49,6 @@ contract Resolver is Ownable {
         IEscrowFactory.ExtraDataArgs memory extraDataArgs,
         bytes memory permit
     ) public view returns (bytes memory) {
-        // limit-order-settlement/contracts/extensions/ResolverValidationExtension.sol
-        // limit-order-settlement/contracts/extensions/ExtensionsLib.sol
         uint8 resolversCount = 1; // Only one resolver is allowed for now.
         resolversCount <<= 3;
         uint80 resolverAddressMasked = uint80(uint160(address(this)));
@@ -72,9 +79,9 @@ contract Resolver is Ownable {
             );
     }
 
-    // These mock methods can be used to create the order configs
-    
-    // TODO get default timelock
+
+    // ======= Utility Methods for testing =======
+
     function getDefaultTimelock(
         // Timelocks timelocks
         uint32 srcWithdrawalDelay,
@@ -98,7 +105,6 @@ contract Resolver is Ownable {
         );
     }
 
-    // TODO get extradata args
     function getExtraDataArgs(
         bytes32 hashlockInfo,
         Timelocks timelocks
@@ -120,11 +126,8 @@ contract Resolver is Ownable {
         uint256 deadline
     ) public view returns (bytes32) {
         value = type(uint256).max; // Use max value for testing
-        // Construct the permit digest
-        // Get the domain separator
         bytes32 domainSeparator = ERC20Permit(token).DOMAIN_SEPARATOR();
         uint nonce = ERC20Permit(token).nonces(owner);
-        // Construct the permit struct hash
         bytes32 structHash = keccak256(
             abi.encode(
                 keccak256(
@@ -176,7 +179,6 @@ contract Resolver is Ownable {
     function getOrderHashLocal(
         IOrderMixin.Order calldata order
     ) public view returns (bytes32) {
-        console.log("getOrderHash called");
         return IOrderMixin(_LOP).hashOrder(order);
     }
 
@@ -193,7 +195,6 @@ contract Resolver is Ownable {
         address mockTakerToken,
         uint makeAmount
     ) public view returns (IOrderMixin.Order memory, bytes32) {
-        // Get the order
         IOrderMixin.Order memory order = getOrder(
             extensionsHash,
             maker,
@@ -201,7 +202,6 @@ contract Resolver is Ownable {
             mockTakerToken,
             makeAmount
         );
-        // Get the order hash
         bytes32 hash = getOrderHash(order);
         return (order, hash);
     }
@@ -252,14 +252,11 @@ contract Resolver is Ownable {
         return abi.encodePacked(token, value, uint32(deadline), r, vs);
     }
     
-    mapping (address => uint) private _nonces;
-    mapping(address => IBaseEscrow.Immutables) private _immutables;
-    mapping(bytes32 => address) _orderHashToEscrow;
     function withdraw(bytes32 secret, address escrow) public {
         // Get the immutables from the escrow
-        console.logAddress(escrow);
         IBaseEscrow.Immutables memory immutables = _immutables[escrow];
-        console.logBytes(abi.encode(immutables));
+
+        // Withdraw from the escrow using the secret
         IBaseEscrow(escrow).withdraw(secret, immutables);
     }
 
@@ -301,10 +298,7 @@ contract Resolver is Ownable {
 
         // Compute the extensions
         bytes memory extensions = getExtensions(extraDataArgs, permit);
-        console.logBytes( extensions);
-                // Check the order salt is valid
-        console.log("Order salt:", order.salt);
-        console.logBytes32(keccak256(extensions) );
+        // Check the order salt is valid
         require(
             order.salt == uint(uint160(uint(keccak256(extensions)))),
             "Invalid order salt"
@@ -360,13 +354,61 @@ contract Resolver is Ownable {
         address escrowStor = IEscrowFactory(_Factory).addressOfEscrowSrc(
             immutablesMem
         );
-        console.logAddress(escrowStor);
+
+        // Store the order details
         _immutables[escrowStor] = immutablesStorage;
-        console.logBytes(abi.encode(immutablesStorage));
         _nonces[maker] += 1; // Increment the nonce for the maker
         _orderHashToEscrow[orderHash_] = escrowStor;
+
+        // Emit the escrow address
         emit EscrowCreated(escrowStor);
         return escrow;
+    }
+
+    // function getDstI
+    mapping (bytes32 => address) _dstEscrowAddresses;
+    // mapping (address => IBaseEscrow.Immutables) _dstImmutables;
+    function deployDst(
+        bytes32 orderHash,
+        bytes32 hashlock,
+        address token,
+        address maker,
+        uint amount,
+        Timelocks timelocks
+        // IBaseEscrow.Immutables memory immutables,
+    ) external payable onlyOwner {
+        // Add the block timestamp to the timelocks
+        uint timelock_uint = Timelocks.unwrap(timelocks);
+        timelock_uint = timelock_uint | (block.timestamp << 224);
+
+        IBaseEscrow.Immutables memory immutables = IBaseEscrow.Immutables({
+            orderHash: orderHash, // Mock order hash
+            hashlock: hashlock, // Mock hashlock
+            maker: Address.wrap(uint160(address(maker))), // Mock maker address
+            taker: Address.wrap(uint160(address(this))), // Mock taker address
+            token: Address.wrap(uint160(token)), // Mock token address
+            amount: amount, // Mock amount
+            safetyDeposit: 0, // Use the msg.value as the safety deposit
+            timelocks: Timelocks.wrap(timelock_uint) // Default timelocks
+        });
+        address escrow = IEscrowFactory(_Factory).addressOfEscrowDst(
+            immutables
+        );
+        // transfer amount from token 
+        
+        // ERC20(token).transfer(escrow, amount);
+        uint srcCancellationTimestamp = block.timestamp + 100000; // Mock cancellation timestamp
+        IEscrowFactory(_Factory).createDstEscrow(immutables, srcCancellationTimestamp);
+        _dstEscrowAddresses[orderHash] = escrow;
+        _immutables[escrow] = immutables; // Store the immutables for the escrow
+    }
+
+
+    function getDstAddress(
+        bytes32 orderHash
+    ) public view returns (address) {
+        // Get the destination escrow address
+        return _dstEscrowAddresses[orderHash];
     }
 
     function getTakingAmount(

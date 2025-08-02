@@ -69,9 +69,8 @@ module escrow_factory::order_factory {
         order_address: address,
         depositor: address,
         deposit_amount: u64,
-        order_hash: vector<u8>,
+        order_hash: vector<u8>
     }
-
 
     public entry fun create_order<M: key>(
         relay: &signer,
@@ -147,40 +146,39 @@ module escrow_factory::order_factory {
             primary_fungible_store::withdraw(
                 relay, incentive_feeAssetMetadata, recover_incentive_fee
             );
-        
+
         // … and push them into the vault’s primary store
         primary_fungible_store::deposit(
             signer::address_of(&vault_signer), incentive_fee_fa
         );
-        
-        let order_address = signer::address_of(&vault_signer);
-        event::emit(OrderCreatedEvent {
-            order_address: order_address,
-            depositor: addr,
-            deposit_amount,
-            order_hash,
-        });
-        debug::print(&signer::address_of(&vault_signer));
 
-        // signer::address_of(&vault_signer)
+        let order_address = signer::address_of(&vault_signer);
+        event::emit(
+            OrderCreatedEvent {
+                order_address: order_address,
+                depositor: addr,
+                deposit_amount,
+                order_hash
+            }
+        );
+        debug::print(&signer::address_of(&vault_signer));
     }
 
-    public  fun escrow_exists(vault_address: address): bool {
+    public fun escrow_exists(vault_address: address): bool {
         exists<Escrow>(vault_address)
     }
 
-    
-    
-#[event]
-public struct EscrowCreatedEvent has drop, store {
-    escrow_address: address,
-    order_address: address,
-    receiver: address,
-    makeAmount: u64,
-    incentive_fee: u64,
-    escrow_hash: vector<u8>,
-}
-    public entry  fun create_escrow_src<M: key, N: key>(
+    #[event]
+    public struct EscrowCreatedEvent has drop, store {
+        escrow_address: address,
+        order_address: address,
+        receiver: address,
+        makeAmount: u64,
+        incentive_fee: u64,
+        escrow_hash: vector<u8>
+    }
+    public entry fun create_escrow_src<M: key,
+N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -208,7 +206,7 @@ public struct EscrowCreatedEvent has drop, store {
         // Ensure that the incentive fee is greater than the minimum incentive fee
         assert!(incentive_fee > order.min_incentive_fee, EINVALID_BALANCE);
 
-        // TODO set deposit amonut to the order balance
+        // TODO set deposit amount to the order balance
         // Ensure that the make amount is less than or equal to the deposit amount
         assert!(makeAmount <= order.deposit_amount, EINVALID_BALANCE);
 
@@ -296,20 +294,31 @@ public struct EscrowCreatedEvent has drop, store {
         };
 
         let escrow_address = signer::address_of(&escrow_signer);
-        event::emit(EscrowCreatedEvent {
-            escrow_address,
-            order_address,
-            receiver,
-            makeAmount,
-            incentive_fee,
-            escrow_hash,
-        });
+        event::emit(
+            EscrowCreatedEvent {
+                escrow_address,
+                order_address,
+                receiver,
+                makeAmount,
+                incentive_fee,
+                escrow_hash
+            }
+        );
 
         debug::print(&escrow_address);
         // signer::address_of(&escrow_signer)
     }
 
-    public entry  fun create_escrow_dst<M: key, N: key>(
+    #[event]
+    public struct EscrowDstCreatedEvent has drop, store {
+        orderHash: vector<u8>,
+        escrow_address: address,
+        receiver: address,
+        makeAmount: u64,
+        incentive_fee: u64,
+        escrow_hash: vector<u8>
+    }
+    public entry fun create_escrow_dst<M: key, N: key>(
         account: &signer,
         order_hash: vector<u8>,
         receiver: address,
@@ -370,13 +379,21 @@ public struct EscrowCreatedEvent has drop, store {
             escrow_cap: cap
         };
 
-        move_to<Escrow>(&escrow_signer, escrow);
+        event::emit(
+            EscrowDstCreatedEvent {
+                orderHash: order_hash,
+                escrow_address: signer::address_of(&escrow_signer),
+                receiver,
+                makeAmount: deposit_amount,
+                incentive_fee,
+                escrow_hash
+            }
+        );
 
-        // Return the address of the escrow signer
-        // signer::address_of(&escrow_signer)
+        move_to<Escrow>(&escrow_signer, escrow);
     }
 
-    public entry  fun recover<M: key, N: key>(
+    public entry fun recover<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -424,7 +441,7 @@ public struct EscrowCreatedEvent has drop, store {
         primary_fungible_store::deposit(signer::address_of(account), incentive_fee_fa);
     }
 
-    public entry  fun withdraw<M: key, N: key>(
+    public entry fun withdraw<M: key, N: key>(
         account: &signer,
         vault_address: address,
         secret: vector<u8>,
@@ -452,7 +469,10 @@ public struct EscrowCreatedEvent has drop, store {
                     >= escrow.start_timestamp + escrow.timelock.withdraw_period_s,
                 EINVALID_TIMELOCK_STATE
             );
-            assert!(signer::address_of(account) == escrow.receiver, EINVALID_SIGNER);
+            assert!(
+                signer::address_of(account) == escrow.receiver || 
+                signer::address_of(account) == escrow.depositor,
+                EINVALID_SIGNER);
         };
 
         // Withdraw the incentive fee from the vault's primary store
@@ -472,7 +492,7 @@ public struct EscrowCreatedEvent has drop, store {
         primary_fungible_store::deposit(escrow.receiver, deposit_fa);
     }
 
-    public entry  fun cancel<M: key, N: key>(
+    public entry fun cancel<M: key, N: key>(
         account: &signer,
         vault_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
