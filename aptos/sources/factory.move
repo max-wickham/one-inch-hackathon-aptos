@@ -21,6 +21,7 @@ module escrow_factory::order_factory {
     const ESTORE_NOT_PUBLISHED: u64 = 3;
     const EINVALID_TIMELOCK_STATE: u64 = 4;
     const EINVALID_ASSET_TYPE: u64 = 5;
+    const INVALID_HASH_TYPE: u64 = 6;
 
     /* ------------------------------------------------------------ *
     *  Data types                                                   *
@@ -72,6 +73,28 @@ module escrow_factory::order_factory {
         order_hash: vector<u8>
     }
 
+    #[event]
+    public struct EscrowCreatedEvent has drop, store {
+        escrow_address: address,
+        order_address: address,
+        receiver: address,
+        makeAmount: u64,
+        incentive_fee: u64,
+        escrow_hash: vector<u8>,
+        proof: vector<vector<u8>>, // Merkle proof for the escrow
+        leaf: vector<u8> // Merkle tree leaf
+    }
+
+    #[event]
+    public struct EscrowDstCreatedEvent has drop, store {
+        orderHash: vector<u8>,
+        escrow_address: address,
+        receiver: address,
+        makeAmount: u64,
+        incentive_fee: u64,
+        escrow_hash: vector<u8>
+    }
+
     public entry fun create_order<M: key>(
         relay: &signer,
         account: &signer,
@@ -88,8 +111,9 @@ module escrow_factory::order_factory {
         withDrawPeriod: u64,
         publicWithDrawPeriod: u64,
         cancelPeriod: u64,
-        publicCancelPeriod: u64
+        publicCancelPeriod: u64,
     ) {
+        // If the merkle root is not empty, we allow multi-fill
         let incentive_feeAssetMetadataHash =
             aptos_hash::keccak256(bcs::to_bytes(&incentive_feeAssetMetadata));
         let order_hash =
@@ -129,7 +153,7 @@ module escrow_factory::order_factory {
                 public_cancel_period_s: publicCancelPeriod
             },
             allow_multi_fill,
-            whitelisted_addresses
+            whitelisted_addresses,
         };
         move_to<FusionPlusOrder>(&vault_signer, order);
 
@@ -158,27 +182,13 @@ module escrow_factory::order_factory {
                 order_address: order_address,
                 depositor: addr,
                 deposit_amount,
-                order_hash
+                order_hash            
             }
         );
         debug::print(&signer::address_of(&vault_signer));
     }
 
-    public fun escrow_exists(vault_address: address): bool {
-        exists<Escrow>(vault_address)
-    }
-
-    #[event]
-    public struct EscrowCreatedEvent has drop, store {
-        escrow_address: address,
-        order_address: address,
-        receiver: address,
-        makeAmount: u64,
-        incentive_fee: u64,
-        escrow_hash: vector<u8>
-    }
-    public entry fun create_escrow_src<M: key,
-N: key>(
+    public entry fun create_escrow_src<M: key, N: key>(
         account: &signer,
         order_address: address,
         incentive_feeAssetMetadata: object::Object<M>,
@@ -186,7 +196,10 @@ N: key>(
         makeAmount: u64,
         incentive_fee: u64,
         receiver: address,
-        salt: vector<u8>
+        salt: vector<u8>,
+        leaf: vector<u8>, // Merkle tree leaf
+        proof: vector<vector<u8>>, // Merkle tree proof
+        directions: vector<bool>,
     ) acquires FusionPlusOrder {
         // Find the order and create an escrow signer for it
         assert!(exists<FusionPlusOrder>(order_address), ERESOURCE_DOESNT_EXIST);
@@ -211,9 +224,20 @@ N: key>(
         assert!(makeAmount <= order.deposit_amount, EINVALID_BALANCE);
 
         // If multi fill is not allowed, ensure that the make amount is equal to the deposit amount
+        let hashlock;
         if (!order.allow_multi_fill) {
+            // Ensure the leaf is length 0
+            assert!(vector::length(&leaf) == 0, INVALID_HASH_TYPE);
+            // Ensure the proof is length 0
+            assert!(vector::length(&proof) == 0, INVALID_HASH_TYPE);
             // Ensure that the make amount is equal to the deposit amount
             assert!(makeAmount == order.deposit_amount, EINVALID_BALANCE);
+            hashlock = order.hashlock;
+        } else {
+            assert!(validate_merkle_proof(
+                order.hashlock, leaf, proof, directions
+            ), 8);
+            hashlock = leaf;
         };
 
         // Ensure that the receiver is whitelisted if whitelist exists
@@ -225,7 +249,6 @@ N: key>(
             );
         };
 
-        // debug::print(&signer::address_of(&escrow_signer));
         // Verify that the asset types match the order
         assert!(
             object::object_address(&incentive_feeAssetMetadata)
@@ -242,13 +265,15 @@ N: key>(
             timestamp::now_seconds() < order.recover_timestamp,
             EINVALID_TIMELOCK_STATE
         );
-
+        debug::print(&b"Creating escrow with hashlock: ");
         // Create the escrow object
         let escrow = Escrow {
             incentive_fee,
             deposit: makeAmount,
-            hashlock: order.hashlock,
+            hashlock: hashlock,
             depositor: order.depositor,
+            // TODO !!!!!!!!!!!!!!!!!!!!!!11
+            // receiver: receiver,
             receiver: signer::address_of(account),
             start_timestamp: timestamp::now_seconds(),
             timelock: order.timelock,
@@ -273,7 +298,7 @@ N: key>(
             primary_fungible_store::withdraw(
                 &order_signer, depositAssetMetadata, makeAmount
             );
-        // … and push them into the vault’s primary store
+        // and push them into the vault’s primary store
         primary_fungible_store::deposit(signer::address_of(&escrow_signer), deposit_fa);
 
         // If the balance of the deposit asset in the order is 0 return the recover incentive to the creator
@@ -301,23 +326,15 @@ N: key>(
                 receiver,
                 makeAmount,
                 incentive_fee,
-                escrow_hash
+                escrow_hash,
+                proof: proof,
+                leaf: hashlock
             }
         );
 
         debug::print(&escrow_address);
-        // signer::address_of(&escrow_signer)
     }
 
-    #[event]
-    public struct EscrowDstCreatedEvent has drop, store {
-        orderHash: vector<u8>,
-        escrow_address: address,
-        receiver: address,
-        makeAmount: u64,
-        incentive_fee: u64,
-        escrow_hash: vector<u8>
-    }
     public entry fun create_escrow_dst<M: key, N: key>(
         account: &signer,
         order_hash: vector<u8>,
@@ -528,5 +545,32 @@ N: key>(
             );
         // … and push them into the primary store of the account
         primary_fungible_store::deposit(escrow.depositor, deposit_fa);
+    }
+
+    fun validate_merkle_proof(
+        root: vector<u8>,
+        leaf: vector<u8>,
+        proof: vector<vector<u8>>,
+        directions: vector<bool>
+    ): bool {
+        let result: vector<vector<u8>> = vector::empty();
+        let hash = leaf;
+        result.push_back(hash);
+        while (vector::length(&proof) > 0) {
+            let node = vector::pop_back(&mut proof);
+            let isRight = vector::pop_back(&mut directions);
+            result.push_back(node);
+            if (isRight) {
+                let combined = hash;
+                vector::append(&mut combined, node);
+                hash = aptos_hash::keccak256(combined);
+            } else {
+                let combined = node;
+                vector::append(&mut combined, hash);
+                hash = aptos_hash::keccak256(combined);
+            };
+            result.push_back(hash);
+        };
+        root == hash
     }
 }

@@ -8,6 +8,7 @@ import {
     AccountAddress,
     Uint8,
 } from "@aptos-labs/ts-sdk";
+import { time } from "console";
 import * as dotenv from "dotenv";
 import { keccak256, SigningKey, toUtf8Bytes } from "ethers";
 import { ethers, Contract, Wallet, Provider } from "ethers";
@@ -246,7 +247,7 @@ class AptosOrderManager {
 
             // Extract escrow address from emitted events
             const escrowAddress =
-                this.extractDSTEscrowAddress(executedTransaction);
+                this.extractEscrowDstAddress(executedTransaction);
 
             console.log("Escrow dst created successfully!");
             console.log("Transaction hash:", executedTransaction.hash);
@@ -262,7 +263,7 @@ class AptosOrderManager {
         }
     }
 
-    private extractDSTEscrowAddress(transaction: any): string {
+    private extractEscrowDstAddress(transaction: any): string {
         try {
             // Look for the EscrowCreatedEvent in the transaction events
             const escrowCreatedEvent = transaction.events?.find((event: any) =>
@@ -316,7 +317,7 @@ class AptosOrderManager {
         }
     }
 
-    async createEscrow(params: {
+    async createEscrowSrc(params: {
         orderAddress: string;
         depositAssetMetadata: string;
         incentive_feeAssetMetadata: string;
@@ -324,6 +325,8 @@ class AptosOrderManager {
         incentiveFee: number;
         receiver: string;
         salt?: Uint8Array;
+        leaf?: Uint8Array; // Optional, for Merkle tree proof
+        proof?: { hash: Uint8Array<ArrayBufferLike>; isRight: boolean }[]; // Optional, for Merkle tree proof
     }): Promise<{ transactionHash: string; escrowAddress: string }> {
         try {
             console.log("Creating escrow transaction...");
@@ -335,7 +338,14 @@ class AptosOrderManager {
 
             // Generate salt if not provided
             const salt = params.salt || this.generateSalt();
-
+            const directions = params.proof
+                ? params.proof.map((proofElement) => proofElement.isRight)
+                : [];
+            const proof = params.proof
+                ? params.proof.map((proofElement) =>
+                      Array.from(proofElement.hash)
+                  )
+                : [];
             const payload: InputEntryFunctionData = {
                 function: `${this.moduleAddress}::order_factory::create_escrow_src`,
                 typeArguments: [
@@ -350,6 +360,9 @@ class AptosOrderManager {
                     params.incentiveFee,
                     params.receiver,
                     Array.from(salt),
+                    params.leaf ? Array.from(params.leaf) : [], // Convert Uint8Array to Array for serialization
+                    proof,
+                    directions,
                 ],
             };
 
@@ -381,7 +394,7 @@ class AptosOrderManager {
 
             // Extract escrow address from emitted events
             const escrowAddress =
-                this.extractEscrowAddress(executedTransaction);
+                this.extractEscrowSrcAddress(executedTransaction);
 
             console.log("Escrow created successfully!");
             console.log("Transaction hash:", executedTransaction.hash);
@@ -397,7 +410,7 @@ class AptosOrderManager {
         }
     }
 
-    private extractEscrowAddress(transaction: any): string {
+    private extractEscrowSrcAddress(transaction: any): string {
         try {
             // Look for the EscrowCreatedEvent in the transaction events
             const escrowCreatedEvent = transaction.events?.find((event: any) =>
@@ -545,1070 +558,1087 @@ class ResolverManager {
 
         // Initialize resolver contract with transaction signer
         this.resolver = new ethers.Contract(
-            this.addresses.resolver,[
-        {
-            "type": "constructor",
-            "inputs": [
-                { "name": "lop", "type": "address", "internalType": "address" },
+            this.addresses.resolver,
+            [
                 {
-                    "name": "factory",
-                    "type": "address",
-                    "internalType": "address"
+                    type: "constructor",
+                    inputs: [
+                        {
+                            name: "lop",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "factory",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "initialOwner",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                    stateMutability: "nonpayable",
+                },
+                { type: "receive", stateMutability: "payable" },
+                {
+                    type: "function",
+                    name: "deployDst",
+                    inputs: [
+                        {
+                            name: "orderHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "hashlock",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "maker",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "amount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "timelocks",
+                            type: "uint256",
+                            internalType: "Timelocks",
+                        },
+                    ],
+                    outputs: [],
+                    stateMutability: "payable",
                 },
                 {
-                    "name": "initialOwner",
-                    "type": "address",
-                    "internalType": "address"
-                }
+                    type: "function",
+                    name: "deploySrc",
+                    inputs: [
+                        {
+                            name: "order",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                        { name: "v", type: "uint8", internalType: "uint8" },
+                        { name: "r", type: "bytes32", internalType: "bytes32" },
+                        { name: "s", type: "bytes32", internalType: "bytes32" },
+                        {
+                            name: "immutables",
+                            type: "tuple",
+                            internalType: "struct IBaseEscrow.Immutables",
+                            components: [
+                                {
+                                    name: "orderHash",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "hashlock",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "taker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "token",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "amount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "safetyDeposit",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "timelocks",
+                                    type: "uint256",
+                                    internalType: "Timelocks",
+                                },
+                            ],
+                        },
+                        {
+                            name: "amount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "permit",
+                            type: "bytes",
+                            internalType: "bytes",
+                        },
+                        {
+                            name: "extraDataArgs",
+                            type: "tuple",
+                            internalType: "struct IEscrowFactory.ExtraDataArgs",
+                            components: [
+                                {
+                                    name: "hashlockInfo",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "dstChainId",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "dstToken",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "deposits",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "timelocks",
+                                    type: "uint256",
+                                    internalType: "Timelocks",
+                                },
+                            ],
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "address", internalType: "address" },
+                    ],
+                    stateMutability: "payable",
+                },
+                {
+                    type: "function",
+                    name: "getDefaultTimelock",
+                    inputs: [
+                        {
+                            name: "srcWithdrawalDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "srcPublicWithdrawalDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "srcCancellationDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "srcPublicCancellationDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "dstWithdrawalDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "dstPublicWithdrawalDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                        {
+                            name: "dstCancellationDelay",
+                            type: "uint32",
+                            internalType: "uint32",
+                        },
+                    ],
+                    outputs: [
+                        {
+                            name: "",
+                            type: "uint256",
+                            internalType: "Timelocks",
+                        },
+                    ],
+                    stateMutability: "pure",
+                },
+                {
+                    type: "function",
+                    name: "getDstAddress",
+                    inputs: [
+                        {
+                            name: "orderHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "address", internalType: "address" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getEscrowAddress",
+                    inputs: [
+                        {
+                            name: "orderHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "address", internalType: "address" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getExtensions",
+                    inputs: [
+                        {
+                            name: "extraDataArgs",
+                            type: "tuple",
+                            internalType: "struct IEscrowFactory.ExtraDataArgs",
+                            components: [
+                                {
+                                    name: "hashlockInfo",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "dstChainId",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "dstToken",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "deposits",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "timelocks",
+                                    type: "uint256",
+                                    internalType: "Timelocks",
+                                },
+                            ],
+                        },
+                        {
+                            name: "permit",
+                            type: "bytes",
+                            internalType: "bytes",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes", internalType: "bytes" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getExtensionsHash",
+                    inputs: [
+                        {
+                            name: "extensions",
+                            type: "bytes",
+                            internalType: "bytes",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes32", internalType: "bytes32" },
+                    ],
+                    stateMutability: "pure",
+                },
+                {
+                    type: "function",
+                    name: "getExtraDataArgs",
+                    inputs: [
+                        {
+                            name: "hashlockInfo",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "timelocks",
+                            type: "uint256",
+                            internalType: "Timelocks",
+                        },
+                    ],
+                    outputs: [
+                        {
+                            name: "",
+                            type: "tuple",
+                            internalType: "struct IEscrowFactory.ExtraDataArgs",
+                            components: [
+                                {
+                                    name: "hashlockInfo",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "dstChainId",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "dstToken",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "deposits",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "timelocks",
+                                    type: "uint256",
+                                    internalType: "Timelocks",
+                                },
+                            ],
+                        },
+                    ],
+                    stateMutability: "pure",
+                },
+                {
+                    type: "function",
+                    name: "getImmutables",
+                    inputs: [
+                        {
+                            name: "orderHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "hashlock",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "maker",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "amount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "timelocks",
+                            type: "uint256",
+                            internalType: "Timelocks",
+                        },
+                    ],
+                    outputs: [
+                        {
+                            name: "",
+                            type: "tuple",
+                            internalType: "struct IBaseEscrow.Immutables",
+                            components: [
+                                {
+                                    name: "orderHash",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "hashlock",
+                                    type: "bytes32",
+                                    internalType: "bytes32",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "taker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "token",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "amount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "safetyDeposit",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "timelocks",
+                                    type: "uint256",
+                                    internalType: "Timelocks",
+                                },
+                            ],
+                        },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getOrder",
+                    inputs: [
+                        {
+                            name: "extensionsHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "maker",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "mockTakerToken",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "makeAmount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                    ],
+                    outputs: [
+                        {
+                            name: "",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getOrderAndHash",
+                    inputs: [
+                        {
+                            name: "extensionsHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "maker",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "mockTakerToken",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "makeAmount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                    ],
+                    outputs: [
+                        {
+                            name: "",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                        { name: "", type: "bytes32", internalType: "bytes32" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getOrderHash",
+                    inputs: [
+                        {
+                            name: "order",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes32", internalType: "bytes32" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getOrderHashLocal",
+                    inputs: [
+                        {
+                            name: "order",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes32", internalType: "bytes32" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getPermitDigest",
+                    inputs: [
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "owner",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "spender",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "value",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "deadline",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes32", internalType: "bytes32" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "getTakingAmount",
+                    inputs: [
+                        {
+                            name: "order",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                        {
+                            name: "extension",
+                            type: "bytes",
+                            internalType: "bytes",
+                        },
+                        {
+                            name: "orderHash",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "taker",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "makingAmount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "remainingMakingAmount",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "extraData",
+                            type: "bytes",
+                            internalType: "bytes",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "uint256", internalType: "uint256" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "isValidOrderSig",
+                    inputs: [
+                        {
+                            name: "order",
+                            type: "tuple",
+                            internalType: "struct IOrderMixin.Order",
+                            components: [
+                                {
+                                    name: "salt",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "maker",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "receiver",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "takerAsset",
+                                    type: "uint256",
+                                    internalType: "Address",
+                                },
+                                {
+                                    name: "makingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "takingAmount",
+                                    type: "uint256",
+                                    internalType: "uint256",
+                                },
+                                {
+                                    name: "makerTraits",
+                                    type: "uint256",
+                                    internalType: "MakerTraits",
+                                },
+                            ],
+                        },
+                        { name: "v", type: "uint8", internalType: "uint8" },
+                        { name: "r", type: "bytes32", internalType: "bytes32" },
+                        { name: "s", type: "bytes32", internalType: "bytes32" },
+                        {
+                            name: "signer",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                    outputs: [{ name: "", type: "bool", internalType: "bool" }],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "owner",
+                    inputs: [],
+                    outputs: [
+                        { name: "", type: "address", internalType: "address" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "packSig",
+                    inputs: [
+                        { name: "v", type: "uint8", internalType: "uint8" },
+                        { name: "r", type: "bytes32", internalType: "bytes32" },
+                        { name: "s", type: "bytes32", internalType: "bytes32" },
+                        {
+                            name: "token",
+                            type: "address",
+                            internalType: "address",
+                        },
+                        {
+                            name: "value",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                        {
+                            name: "deadline",
+                            type: "uint256",
+                            internalType: "uint256",
+                        },
+                    ],
+                    outputs: [
+                        { name: "", type: "bytes", internalType: "bytes" },
+                    ],
+                    stateMutability: "view",
+                },
+                {
+                    type: "function",
+                    name: "renounceOwnership",
+                    inputs: [],
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                },
+                {
+                    type: "function",
+                    name: "transferOwnership",
+                    inputs: [
+                        {
+                            name: "newOwner",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                },
+                {
+                    type: "function",
+                    name: "withdraw",
+                    inputs: [
+                        {
+                            name: "secret",
+                            type: "bytes32",
+                            internalType: "bytes32",
+                        },
+                        {
+                            name: "escrow",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                },
+                {
+                    type: "event",
+                    name: "EscrowCreated",
+                    inputs: [
+                        {
+                            name: "escrow",
+                            type: "address",
+                            indexed: false,
+                            internalType: "address",
+                        },
+                    ],
+                    anonymous: false,
+                },
+                {
+                    type: "event",
+                    name: "OwnershipTransferred",
+                    inputs: [
+                        {
+                            name: "previousOwner",
+                            type: "address",
+                            indexed: true,
+                            internalType: "address",
+                        },
+                        {
+                            name: "newOwner",
+                            type: "address",
+                            indexed: true,
+                            internalType: "address",
+                        },
+                    ],
+                    anonymous: false,
+                },
+                {
+                    type: "error",
+                    name: "OwnableInvalidOwner",
+                    inputs: [
+                        {
+                            name: "owner",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                },
+                {
+                    type: "error",
+                    name: "OwnableUnauthorizedAccount",
+                    inputs: [
+                        {
+                            name: "account",
+                            type: "address",
+                            internalType: "address",
+                        },
+                    ],
+                },
             ],
-            "stateMutability": "nonpayable"
-        },
-        { "type": "receive", "stateMutability": "payable" },
-        {
-            "type": "function",
-            "name": "deployDst",
-            "inputs": [
-                {
-                    "name": "orderHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "hashlock",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "maker",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "timelocks",
-                    "type": "uint256",
-                    "internalType": "Timelocks"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "payable"
-        },
-        {
-            "type": "function",
-            "name": "deploySrc",
-            "inputs": [
-                {
-                    "name": "order",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                },
-                { "name": "v", "type": "uint8", "internalType": "uint8" },
-                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
-                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
-                {
-                    "name": "immutables",
-                    "type": "tuple",
-                    "internalType": "struct IBaseEscrow.Immutables",
-                    "components": [
-                        {
-                            "name": "orderHash",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "hashlock",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "taker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "token",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "safetyDeposit",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "timelocks",
-                            "type": "uint256",
-                            "internalType": "Timelocks"
-                        }
-                    ]
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                { "name": "permit", "type": "bytes", "internalType": "bytes" },
-                {
-                    "name": "extraDataArgs",
-                    "type": "tuple",
-                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
-                    "components": [
-                        {
-                            "name": "hashlockInfo",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "dstChainId",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "dstToken",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "deposits",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "timelocks",
-                            "type": "uint256",
-                            "internalType": "Timelocks"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "address", "internalType": "address" }
-            ],
-            "stateMutability": "payable"
-        },
-        {
-            "type": "function",
-            "name": "getDefaultTimelock",
-            "inputs": [
-                {
-                    "name": "srcWithdrawalDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "srcPublicWithdrawalDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "srcCancellationDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "srcPublicCancellationDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "dstWithdrawalDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "dstPublicWithdrawalDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                },
-                {
-                    "name": "dstCancellationDelay",
-                    "type": "uint32",
-                    "internalType": "uint32"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "uint256", "internalType": "Timelocks" }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
-            "name": "getDstAddress",
-            "inputs": [
-                {
-                    "name": "orderHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "address", "internalType": "address" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getEscrowAddress",
-            "inputs": [
-                {
-                    "name": "orderHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "address", "internalType": "address" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getExtensions",
-            "inputs": [
-                {
-                    "name": "extraDataArgs",
-                    "type": "tuple",
-                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
-                    "components": [
-                        {
-                            "name": "hashlockInfo",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "dstChainId",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "dstToken",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "deposits",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "timelocks",
-                            "type": "uint256",
-                            "internalType": "Timelocks"
-                        }
-                    ]
-                },
-                { "name": "permit", "type": "bytes", "internalType": "bytes" }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes", "internalType": "bytes" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getExtensionsHash",
-            "inputs": [
-                {
-                    "name": "extensions",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes32", "internalType": "bytes32" }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
-            "name": "getExtraDataArgs",
-            "inputs": [
-                {
-                    "name": "hashlockInfo",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "timelocks",
-                    "type": "uint256",
-                    "internalType": "Timelocks"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "tuple",
-                    "internalType": "struct IEscrowFactory.ExtraDataArgs",
-                    "components": [
-                        {
-                            "name": "hashlockInfo",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "dstChainId",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "dstToken",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "deposits",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "timelocks",
-                            "type": "uint256",
-                            "internalType": "Timelocks"
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "pure"
-        },
-        {
-            "type": "function",
-            "name": "getImmutables",
-            "inputs": [
-                {
-                    "name": "orderHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "hashlock",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "maker",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "amount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "timelocks",
-                    "type": "uint256",
-                    "internalType": "Timelocks"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "tuple",
-                    "internalType": "struct IBaseEscrow.Immutables",
-                    "components": [
-                        {
-                            "name": "orderHash",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "hashlock",
-                            "type": "bytes32",
-                            "internalType": "bytes32"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "taker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "token",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "safetyDeposit",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "timelocks",
-                            "type": "uint256",
-                            "internalType": "Timelocks"
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getOrder",
-            "inputs": [
-                {
-                    "name": "extensionsHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "maker",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "mockTakerToken",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "makeAmount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getOrderAndHash",
-            "inputs": [
-                {
-                    "name": "extensionsHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "maker",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "mockTakerToken",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "makeAmount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                },
-                { "name": "", "type": "bytes32", "internalType": "bytes32" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getOrderHash",
-            "inputs": [
-                {
-                    "name": "order",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes32", "internalType": "bytes32" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getOrderHashLocal",
-            "inputs": [
-                {
-                    "name": "order",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes32", "internalType": "bytes32" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getPermitDigest",
-            "inputs": [
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "owner",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "spender",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "value",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "deadline",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes32", "internalType": "bytes32" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "getTakingAmount",
-            "inputs": [
-                {
-                    "name": "order",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                },
-                {
-                    "name": "extension",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                },
-                {
-                    "name": "orderHash",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "taker",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "makingAmount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "remainingMakingAmount",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "extraData",
-                    "type": "bytes",
-                    "internalType": "bytes"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "uint256", "internalType": "uint256" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "isValidOrderSig",
-            "inputs": [
-                {
-                    "name": "order",
-                    "type": "tuple",
-                    "internalType": "struct IOrderMixin.Order",
-                    "components": [
-                        {
-                            "name": "salt",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "maker",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "receiver",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "takerAsset",
-                            "type": "uint256",
-                            "internalType": "Address"
-                        },
-                        {
-                            "name": "makingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "takingAmount",
-                            "type": "uint256",
-                            "internalType": "uint256"
-                        },
-                        {
-                            "name": "makerTraits",
-                            "type": "uint256",
-                            "internalType": "MakerTraits"
-                        }
-                    ]
-                },
-                { "name": "v", "type": "uint8", "internalType": "uint8" },
-                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
-                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
-                {
-                    "name": "signer",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ],
-            "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "owner",
-            "inputs": [],
-            "outputs": [
-                { "name": "", "type": "address", "internalType": "address" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "packSig",
-            "inputs": [
-                { "name": "v", "type": "uint8", "internalType": "uint8" },
-                { "name": "r", "type": "bytes32", "internalType": "bytes32" },
-                { "name": "s", "type": "bytes32", "internalType": "bytes32" },
-                {
-                    "name": "token",
-                    "type": "address",
-                    "internalType": "address"
-                },
-                {
-                    "name": "value",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                },
-                {
-                    "name": "deadline",
-                    "type": "uint256",
-                    "internalType": "uint256"
-                }
-            ],
-            "outputs": [
-                { "name": "", "type": "bytes", "internalType": "bytes" }
-            ],
-            "stateMutability": "view"
-        },
-        {
-            "type": "function",
-            "name": "renounceOwnership",
-            "inputs": [],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "transferOwnership",
-            "inputs": [
-                {
-                    "name": "newOwner",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "function",
-            "name": "withdraw",
-            "inputs": [
-                {
-                    "name": "secret",
-                    "type": "bytes32",
-                    "internalType": "bytes32"
-                },
-                {
-                    "name": "escrow",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ],
-            "outputs": [],
-            "stateMutability": "nonpayable"
-        },
-        {
-            "type": "event",
-            "name": "EscrowCreated",
-            "inputs": [
-                {
-                    "name": "escrow",
-                    "type": "address",
-                    "indexed": false,
-                    "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "event",
-            "name": "OwnershipTransferred",
-            "inputs": [
-                {
-                    "name": "previousOwner",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                },
-                {
-                    "name": "newOwner",
-                    "type": "address",
-                    "indexed": true,
-                    "internalType": "address"
-                }
-            ],
-            "anonymous": false
-        },
-        {
-            "type": "error",
-            "name": "OwnableInvalidOwner",
-            "inputs": [
-                {
-                    "name": "owner",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ]
-        },
-        {
-            "type": "error",
-            "name": "OwnableUnauthorizedAccount",
-            "inputs": [
-                {
-                    "name": "account",
-                    "type": "address",
-                    "internalType": "address"
-                }
-            ]
-        }
-    ],
             this.transactionSigner // Transaction signer calls the resolver
         );
     }
@@ -1692,7 +1722,7 @@ class ResolverManager {
         orderHash: Uint8Array;
         secret: Uint8Array;
         amount: bigint;
-        makerAddress: string,
+        makerAddress: string;
         timeDelays?: {
             srcWithdrawalDelay: number;
             srcPublicWithdrawalDelay: number;
@@ -1744,29 +1774,29 @@ class ResolverManager {
             params.orderHash
         );
 
-        console.log("✅ Dst escrow deployed at:", escrowAddress);
+        console.log("Dst escrow deployed at:", escrowAddress);
 
-        // Sleep for wait time plus a second
-        // Wait for 6 seconds to ensure the contract is deployed
-        await new Promise((resolve) =>
-            setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
-        );
-        // Call withdraw
+        return {
+            escrowAddress,
+            transactionHash: receipt.transactionHash,
+        };
+    }
 
-        await this.resolver.withdraw(
+    async withdrawDst(params: {
+        secret: Uint8Array;
+        escrowAddress: string;
+    }): Promise<string> {
+        const tx = await this.resolver.withdraw(
             params.secret, // The secret used to create the hashlock
-            escrowAddress, // The escrow address returned from deploySrc
+            params.escrowAddress, // The escrow address returned from deploySrc
             {
                 // value: params.safetyDeposit || 0n,
                 gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
                 gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
             }
         );
-
-        return {
-            escrowAddress,
-            transactionHash: receipt.transactionHash,
-        };
+        const receipt = await tx.wait();
+        return tx.hash;
     }
 
     async deploySrc(params: {
@@ -1792,7 +1822,8 @@ class ResolverManager {
                 this.transactionSigner.address
             );
             console.log("👤 Order maker:", params.makerAddress);
-            const secret = ethers.keccak256(params.secret);
+            // const secret = ethers.keccak256(params.secret);
+            const secret = params.secret;
             // Step 1: Generate hashlock from secret
             const hashlock = ethers.keccak256(secret);
             console.log("🔒 Hashlock generated:", hashlock);
@@ -1906,15 +1937,6 @@ class ResolverManager {
                 this.transactionSigner.address
             );
 
-            console.log("   Immutables:", immutables);
-            console.log("   Order:", order);
-            console.log("   Permit:", permit);
-            console.log("   Extensions:", extensions);
-            console.log("   ExtraDataArgs:", extraDataArgs);
-            console.log("   v:", v, "r:", r, "s:", s);
-            console.log(" makeAmount:", params.makeAmount);
-            console.log("maker private key ", params.makerPrivateKey);
-
             const val = await this.resolver.isValidOrderSig(
                 [...order],
                 v,
@@ -1953,20 +1975,20 @@ class ResolverManager {
             );
             console.log("Escrow address:", escrowAddress);
             // Wait for 6 seconds to ensure the contract is deployed
-            await new Promise((resolve) =>
-                setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
-            );
-            // Call withdraw
+            // await new Promise((resolve) =>
+            //     setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
+            // );
+            // // Call withdraw
 
-            await this.resolver.withdraw(
-                secret, // The secret used to create the hashlock
-                escrowAddress, // The escrow address returned from deploySrc
-                {
-                    // value: params.safetyDeposit || 0n,
-                    gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
-                    gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
-                }
-            );
+            // await this.resolver.withdraw(
+            //     secret, // The secret used to create the hashlock
+            //     escrowAddress, // The escrow address returned from deploySrc
+            //     {
+            //         // value: params.safetyDeposit || 0n,
+            //         gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
+            //         gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+            //     }
+            // );
 
             return {
                 escrowAddress,
@@ -1978,9 +2000,193 @@ class ResolverManager {
         }
     }
 
+    async withdraw_src(secret: Uint8Array, escrowAddress: string): Promise<string> {
+        const tx = await this.resolver.withdraw(
+            secret, // The secret used to create the hashlock
+            escrowAddress, // The escrow address returned from deploySrc
+            {
+                // value: params.safetyDeposit || 0n,
+                gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
+                gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+            }
+        );
+        await tx.wait();
+        return tx.hash;
+    }
+
     async checkBalance(address: string): Promise<string> {
         const balance = await this.provider.getBalance(address);
         return ethers.formatEther(balance);
+    }
+}
+
+class MerkleTree {
+    private leaves: Uint8Array[];
+    private tree: Uint8Array[][];
+
+    constructor(preimages: Uint8Array[]) {
+        // if (preimages.length !== 4) {
+        //     throw new Error('This implementation requires exactly 4 preimages');
+        // }
+
+        // Hash the preimages to create leaves
+        this.leaves = preimages.map((preimage) =>
+            ethers.getBytes(keccak256(preimage))
+        );
+
+        this.tree = this.buildTree();
+    }
+
+    private buildTree(): Uint8Array[][] {
+        const tree: Uint8Array[][] = [];
+        tree[0] = [...this.leaves]; // Level 0: leaves
+
+        // Build tree bottom-up
+        for (let level = 0; tree[level].length > 1; level++) {
+            const currentLevel = tree[level];
+            const nextLevel: Uint8Array[] = [];
+
+            for (let i = 0; i < currentLevel.length; i += 2) {
+                const left = currentLevel[i];
+                const right = currentLevel[i + 1];
+                // Create the combined hash - this mimics the Move function's hashing
+                const combined = ethers.concat([
+                    ethers.getBytes(left),
+                    ethers.getBytes(right),
+                ]);
+                const parentHash = ethers.getBytes(keccak256(combined));
+                nextLevel.push(parentHash);
+            }
+            tree[level + 1] = nextLevel;
+        }
+
+        return tree;
+    }
+
+    validateProof(
+        leafIndex: number,
+        leaf: Uint8Array,
+        proof: Array<{ hash: Uint8Array; isRight: boolean }>,
+        expectedRoot: Uint8Array
+    ): boolean {
+        console.log("=== Merkle Proof Validation ===");
+        console.log(`Leaf Index: ${leafIndex}`);
+        console.log(`Starting Leaf: 0x${ethers.hexlify(leaf).slice(2)}`);
+        console.log(
+            `Expected Root: 0x${ethers.hexlify(expectedRoot).slice(2)}`
+        );
+        console.log("");
+
+        let currentHash = leaf;
+        console.log(
+            `Step 0 - Initial Hash: 0x${ethers.hexlify(currentHash).slice(2)}`
+        );
+
+        // Process each proof element
+        for (let i = 0; i < proof.length; i++) {
+            const proofElement = proof[i];
+            const siblingHash = proofElement.hash;
+            const isRight = proofElement.isRight;
+
+            console.log(`\nStep ${i + 1}:`);
+            console.log(
+                `  Current Hash: 0x${ethers.hexlify(currentHash).slice(2)}`
+            );
+            console.log(
+                `  Sibling Hash: 0x${ethers.hexlify(siblingHash).slice(2)}`
+            );
+            console.log(`  Sibling Position: ${isRight ? "RIGHT" : "LEFT"}`);
+
+            // Combine hashes in correct order
+            let combined: Uint8Array;
+            if (isRight) {
+                // Sibling is on the right, current is on the left
+                combined = ethers.getBytes(
+                    ethers.concat([currentHash, siblingHash])
+                );
+                console.log(`  Concatenation: LEFT(current) + RIGHT(sibling)`);
+            } else {
+                // Sibling is on the left, current is on the right
+                combined = ethers.getBytes(
+                    ethers.concat([siblingHash, currentHash])
+                );
+                console.log(`  Concatenation: LEFT(sibling) + RIGHT(current)`);
+            }
+
+            console.log(`  Combined: 0x${ethers.hexlify(combined).slice(2)}`);
+
+            // Hash the combined value
+            currentHash = ethers.getBytes(keccak256(combined));
+            console.log(
+                `  Result Hash: 0x${ethers.hexlify(currentHash).slice(2)}`
+            );
+        }
+
+        // Compare final hash with expected root
+        const isValid =
+            ethers.hexlify(currentHash) === ethers.hexlify(expectedRoot);
+
+        console.log("\n=== Validation Result ===");
+        console.log(`Computed Root: 0x${ethers.hexlify(currentHash).slice(2)}`);
+        console.log(
+            `Expected Root: 0x${ethers.hexlify(expectedRoot).slice(2)}`
+        );
+        console.log(`Proof Valid: ${isValid ? "TRUE" : "FALSE"}`);
+
+        return isValid;
+    }
+
+    getRoot(): Uint8Array {
+        return this.tree[this.tree.length - 1][0];
+    }
+
+    getProof(leafIndex: number): Array<{ hash: Uint8Array; isRight: boolean }> {
+        if (leafIndex < 0 || leafIndex >= this.leaves.length) {
+            throw new Error("Invalid leaf index");
+        }
+
+        const proof: Array<{ hash: Uint8Array; isRight: boolean }> = [];
+        let currentIndex = leafIndex;
+
+        // Traverse from leaf to root
+        for (let level = 0; level < this.tree.length - 1; level++) {
+            const isRightNode = currentIndex % 2 === 1;
+            const siblingIndex = isRightNode
+                ? currentIndex - 1
+                : currentIndex + 1;
+
+            if (siblingIndex < this.tree[level].length) {
+                proof.push({
+                    hash: this.tree[level][siblingIndex],
+                    isRight: !isRightNode, // If current is right, sibling is left (false)
+                });
+            }
+
+            currentIndex = Math.floor(currentIndex / 2);
+        }
+        // return proof.reverse();
+        return proof;
+    }
+
+    // Convert proof to Move function format
+    // getMoveProof(leafIndex: number): (Uint8Array)[] {
+    //     const proof = this.getProof(leafIndex);
+    //     return proof.map(element => {
+    //         const directionByte = element.isRight ? "0x01" : "0x00";
+    //         // Concatenate direction byte with hash
+    //         //
+    //         return ethers.getBytes(ethers.concat([ethers.getBytes(directionByte), element.hash]));
+    //     });
+    // }
+
+    // Get leaf as bytes for Move function
+    getLeafBytes(leafIndex: number): Uint8Array {
+        return this.leaves[leafIndex];
+    }
+
+    // Get root as bytes for Move function
+    getRootBytes(): Uint8Array {
+        return this.getRoot();
     }
 }
 
@@ -1991,24 +2197,238 @@ function hashSecretWithEthers(secret: Uint8Array): Uint8Array {
     return new Uint8Array(Buffer.from(hashBytes, "hex"));
 }
 
+async function apt_to_eth(aptos_amount: bigint, eth_amount: bigint) {
+    const orderManager = new AptosOrderManager();
+    const transactionSignerPrivateKey =
+        process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
+    const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
+    const makerAddress = process.env.MAKER_ADDRESS!;
+
+    // Initialize resolver manager with transaction signer
+    const resolverManager = new ResolverManager(transactionSignerPrivateKey);
+
+    const merklePreimages = [
+        ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf1"))),
+        ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf2"))),
+        ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf3"))),
+        ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf4"))),
+    ];
+    const withdrawPeriod = 10; // 6 seconds for testing
+    const merkleTree = new MerkleTree(merklePreimages);
+    const root = merkleTree.getRootBytes();
+    console.log("##############################");
+    console.log("Creating Order");
+    console.log("##############################\n");
+    const orderParams = {
+        depositAssetMetadata:
+            "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
+        incentive_feeAssetMetadata:
+            "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
+        recover_incentive_fee: 10, // 0.01 APT (in octas)
+        recoverPeriod: 86400, // 24 hours in seconds
+        deposit_amount: Number(aptos_amount), // 1 APT (in octas)
+        min_incentive_fee: 10, // 0.001 APT (in octas)
+        hashlock: root, //
+        allow_multi_fill: true,
+        whitelisted_addresses: [
+            // Relay address
+            process.env.RELAY_ACCOUNT_ADDRESS!,
+            // Add more addresses if needed
+        ],
+        withDrawPeriod: withdrawPeriod, // 1 hour
+        publicWithDrawPeriod: 7200, // 2 hours
+        cancelPeriod: 1800, // 30 minutes
+        publicCancelPeriod: 3600, // 1 hour
+    };
+
+    const orderResult = await orderManager.createOrder(orderParams);
+    console.log("Order created:", orderResult.orderAddress);
+    console.log("✅ Order Tx:", orderResult.orderAddress);
+    console.log("\n\n");
+
+    for (let i = 0; i < 4; i++) {
+        console.log("##############################");
+        console.log(`Escrow ${i + 1} of 4`);
+        console.log("##############################\n");
+        const escrowParams = {
+            orderAddress: orderResult.orderAddress,
+            depositAssetMetadata:
+                "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
+            incentive_feeAssetMetadata:
+                "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
+            makeAmount: Number(aptos_amount / BigInt(4)), // 0.5 tokens (half of the order amount)
+            incentiveFee: 20, // 0.002 tokens
+            receiver:
+                "0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1", // User address
+            leaf: merkleTree.getLeafBytes(0), // First leaf of the Merkle tree
+            // leaf: hashSecretWithEthers(merklePreimages[0]), // First preimage of the Merkle tree
+            // leaf: hashlock,
+            proof: merkleTree.getProof(0).reverse(), // Merkle proof for the first leaf
+        };
+
+        const escrowResult = await orderManager.createEscrowSrc(escrowParams);
+        console.log("Escrow created:", escrowResult.escrowAddress);
+
+        const orderHash = new Uint8Array(32);
+        crypto.getRandomValues(orderHash);
+        const deployParams = {
+            orderHash: orderHash, // Use a random order hash for testing
+            secret: merklePreimages[0], // The secret used to create the hashlock
+            amount: eth_amount / BigInt(4), // 1 ETH in wei
+            makerAddress: makerAddress, // Maker's address
+            timeDelays: {
+                srcWithdrawalDelay: withdrawPeriod,
+                srcPublicWithdrawalDelay: 10 * 60,
+                srcCancellationDelay: 15 * 60,
+                srcPublicCancellationDelay: 20 * 60,
+                dstWithdrawalDelay: 10,
+                dstPublicWithdrawalDelay: 10 * 60,
+                dstCancellationDelay: 15 * 60,
+            },
+        };
+        const { escrowAddress, transactionHash } =
+            await resolverManager.deployDst(deployParams);
+
+        // ############ Withdraw
+
+        await new Promise((resolve) =>
+            setTimeout(resolve, withdrawPeriod * 1000 + 1000)
+        );
+
+        const withdrawParams = {
+            escrowAddress: escrowResult.escrowAddress,
+            secret: merklePreimages[0], // The same secret used to create the order hashlock
+            // secret: secret, // The same secret used to create the order hashlock
+            incentive_feeAssetMetadata: orderParams.incentive_feeAssetMetadata,
+            depositAssetMetadata: orderParams.depositAssetMetadata,
+        };
+
+        const withdrawResult = await orderManager.withdrawAssets(
+            withdrawParams
+        );
+        console.log(
+            "✅ Src Withdraw On Apt TX:",
+            withdrawResult.transactionHash
+        );
+
+        const secret = new Uint8Array(32);
+        const hashlock = hashSecretWithEthers(secret);
+
+        const dstWithdrawResult = await resolverManager.withdrawDst({
+            secret: merklePreimages[0], // The secret used to create the hashlock
+            escrowAddress: escrowAddress, // The escrow address returned from deploySrc
+        });
+        console.log("✅ Dst Withdrawal On Eth TX:", dstWithdrawResult);
+        console.log("\n\n");
+    }
+}
+
+async function eth_to_apt(eth_amount: bigint, aptos_amount: bigint) {
+
+    const orderManager = new AptosOrderManager();
+    const transactionSignerPrivateKey =
+        process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
+    const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
+    const makerAddress = process.env.MAKER_ADDRESS!;
+    // Initialize resolver manager with transaction signer
+    const resolverManager = new ResolverManager(
+        transactionSignerPrivateKey
+    );
+    const secret = new Uint8Array(32);
+    crypto.getRandomValues(secret);
+    // Hash the secret using keccak256
+    const hashlock = hashSecretWithEthers(secret);
+    const withdrawPeriod = 10; // 6 seconds for testing
+    // // Deploy source escrow
+    const deployParams = {
+        secret: secret,
+        makerAddress: makerAddress, // Maker's address
+        makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
+        makeAmount: eth_amount, // 1 ETH in wei
+        safetyDeposit: BigInt("0"), // 0.1 ETH in wei
+        timeDelays: {
+                srcWithdrawalDelay: withdrawPeriod,
+                srcPublicWithdrawalDelay: 10 * 60,
+                srcCancellationDelay: 15 * 60,
+                srcPublicCancellationDelay: 20 * 60,
+                dstWithdrawalDelay: withdrawPeriod,
+                dstPublicWithdrawalDelay: 10 * 60,
+                dstCancellationDelay: 15 * 60,
+            },
+    };
+    const result = await resolverManager.deploySrc(deployParams);
+
+            // Example order parameters
+        const escrowParams = {
+            order_hash: new Uint8Array(32), // Replace with actual order hash
+            depositAssetMetadata:
+                "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
+            incentive_feeAssetMetadata:
+                "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e",
+            deposit_amount: 1000,
+            incentive_fee: 10,
+            hashlock: hashlock,
+            withDrawPeriod: withdrawPeriod,
+            publicWithDrawPeriod: 7200,
+            cancelPeriod: 86400,
+            publicCancelPeriod: 172800,
+        };
+        const escrowResult = await orderManager.createEscrowDst(escrowParams);
+        console.log("Escrow created:", escrowResult.escrowAddress);
+
+
+
+    await new Promise((resolve) =>
+        setTimeout(resolve, withdrawPeriod * 1000) // Wait for 6 seconds to ensure the contract is deployed
+    );
+
+    const tx = await resolverManager.withdraw_src(
+        secret, // The secret used to create the hashlock
+        result.escrowAddress // The escrow address returned from deploySrc
+    );
+
+    const withdrawParams = {
+            escrowAddress: escrowResult.escrowAddress,
+            secret: secret, // The same secret used to create the order hashlock
+            incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
+            depositAssetMetadata: escrowParams.depositAssetMetadata,
+        };
+    const withdrawResult = await orderManager.withdrawAssets(
+        withdrawParams
+    );
+
+    console.log("✅ Withdrawal On Eth TX:", tx);
+    console.log("✅ Withdrawal On Apt TX:", withdrawResult.transactionHash);
+}
+
 // Example usage
 async function main() {
     try {
+        // apt_to_eth(BigInt("1000"), BigInt("100000000000")); // 1 APT to 1 ETH
+        eth_to_apt(BigInt("100000000000"), BigInt("1000")); // 1 ETH to 1 APT
+        return;
         // =======================================================
         // ======================= APT SRC =======================
         // =======================================================
-
         // const orderManager = new AptosOrderManager();
-
         // // // Check account balances first
         // await orderManager.checkAccountBalances();
-
         // // Random secret bytes of length 32
-        // const secret = new Uint8Array(32);
-        // crypto.getRandomValues(secret);
+        const secret = new Uint8Array(32);
+        crypto.getRandomValues(secret);
         // // Hash the secret using keccak256
         // const hashlock = hashSecretWithEthers(secret);
         // const withdrawPeriod = 1; // 6 seconds for testing
+        // const merklePreimages = [
+        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf1"))),
+        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf2"))),
+        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf3"))),
+        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf4")))
+        // ];
+        // // Create a Merkle tree with the preimages
+        // const merkleTree = new MerkleTree(merklePreimages);
+        // console.log("Merkle Root:", merkleTree.getRoot());
+        // const root = merkleTree.getRootBytes();
         // // Example order parameters
         // const orderParams = {
         //     depositAssetMetadata:
@@ -2020,7 +2440,7 @@ async function main() {
         //     deposit_amount: 100, // 1 APT (in octas)
         //     min_incentive_fee: 10, // 0.001 APT (in octas)
         //     // salt: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), // 8-byte salt
-        //     hashlock:  hashlock, //
+        //     hashlock:  root, //
         //     allow_multi_fill: true,
         //     whitelisted_addresses: [
         //         // Relay address
@@ -2032,12 +2452,25 @@ async function main() {
         //     cancelPeriod: 1800, // 30 minutes
         //     publicCancelPeriod: 3600, // 1 hour
         // };
-
         // const orderResult = await orderManager.createOrder(orderParams);
         // console.log("Order created:", orderResult.orderAddress);
-
         // // Step 2: Create an escrow for the order
         // console.log("\n=== Creating Escrow ===");
+        // // Construct a merkle proof with 4 leafs (and 4 preimages to the leafs)
+        // // Iterate through the proof and print the hex
+        // for (let i = 0; i < merkleTree.getProof(0).length; i++) {
+        //     const proofElement = merkleTree.getProof(0)[i];
+        //     console.log(
+        //         `Proof element ${i}: ${ethers.hexlify(proofElement.hash)} (isRight: ${proofElement.isRight})`
+        //     );
+        // }
+        // merkleTree.validateProof(
+        //     0, // Leaf index
+        //     merkleTree.getLeafBytes(0), // First leaf of the Merkle tree
+        //     merkleTree.getProof(0), // Merkle proof for the first leaf
+        //     merkleTree.getRootBytes() // Merkle root
+        // );
+        // // merkleTree.getMoveProof(0)
         // const escrowParams = {
         //     orderAddress: orderResult.orderAddress,
         //     depositAssetMetadata:
@@ -2048,41 +2481,38 @@ async function main() {
         //     incentiveFee: 20, // 0.002 tokens
         //     receiver:
         //         "0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1", // User address
+        //     leaf: merkleTree.getLeafBytes(0), // First leaf of the Merkle tree
+        //     // leaf: hashSecretWithEthers(merklePreimages[0]), // First preimage of the Merkle tree
+        //     // leaf: hashlock,
+        //     proof: merkleTree.getProof(0).reverse(), // Merkle proof for the first leaf
         // };
-
-        // const escrowResult = await orderManager.createEscrow(escrowParams);
+        // const escrowResult = await orderManager.createEscrowSrc(escrowParams);
         // console.log("Escrow created:", escrowResult.escrowAddress);
-
         // console.log("\n=== Summary ===");
         // console.log("Order Address:", orderResult.orderAddress);
         // console.log("Order Transaction:", orderResult.transactionHash);
         // console.log("Escrow Address:", escrowResult.escrowAddress);
         // console.log("Escrow Transaction:", escrowResult.transactionHash);
-
         // //  Wait for 6 seconds before withdrawing assets
         // console.log("\n=== Withdrawing Assets ===");
         // await new Promise((resolve) => setTimeout(resolve, withdrawPeriod * 1000 + 1000));
         // const withdrawParams = {
         //     escrowAddress: escrowResult.escrowAddress,
-        //     secret: secret, // The same secret used to create the order hashlock
+        //     secret: merklePreimages[0], // The same secret used to create the order hashlock
+        //     // secret: secret, // The same secret used to create the order hashlock
         //     incentive_feeAssetMetadata: orderParams.incentive_feeAssetMetadata,
         //     depositAssetMetadata: orderParams.depositAssetMetadata,
         // };
-
         // const withdrawResult = await orderManager.withdrawAssets(
         //     withdrawParams
         // );
         // console.log("Assets withdrawn successfully!");
-
         // =======================================================
         // ======================= APT DST =======================
         // =======================================================
-
         // const orderManager = new AptosOrderManager();
-
         // // // Check account balances first
         // await orderManager.checkAccountBalances();
-
         // // Random secret bytes of length 32
         // const secret = new Uint8Array(32);
         // crypto.getRandomValues(secret);
@@ -2105,7 +2535,6 @@ async function main() {
         //     publicCancelPeriod: 172800,
         // };
         // const escrowResult = await orderManager.createEscrowDst(escrowParams);
-
         // console.log("Escrow created:", escrowResult.escrowAddress);
         // //  Wait for 6 seconds before withdrawing assets
         // console.log("\n=== Withdrawing Assets ===");
@@ -2118,77 +2547,21 @@ async function main() {
         //     incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
         //     depositAssetMetadata: escrowParams.depositAssetMetadata,
         // };
-
         // const withdrawResult = await orderManager.withdrawAssets(
         //     withdrawParams
         // );
         // console.log("Assets withdrawn successfully!");
-
         // =======================================================
         // ======================= ETH SRC =======================
         // =======================================================
-
-        // const transactionSignerPrivateKey =
-        //     process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
-        // const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
-        // const makerAddress = process.env.MAKER_ADDRESS!;
-
-        // // Initialize resolver manager with transaction signer
-        // const resolverManager = new ResolverManager(
-        //     transactionSignerPrivateKey
-        // );
-
-        // // Check balances
-        // const transactionSignerBalance = await resolverManager.checkBalance(
-        //     resolverManager.transactionSigner.address
-        // );
-        // console.log(
-        //     "Transaction Signer Balance:",
-        //     transactionSignerBalance,
-        //     "ETH"
-        // );
-
-        // // Deploy source escrow
-        // const deployParams = {
-        //     secret: secret,
-        //     makerAddress: makerAddress, // Maker's address
-        //     makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
-        //     makeAmount: BigInt("1000000000"), // 1 ETH in wei
-        //     safetyDeposit: BigInt("0"), // 0.1 ETH in wei
-        // };
-
-        // console.log("🚀 Deploying source escrow...");
-        // console.log(
-        //     "📝 Transaction will be sent by:",
-        //     resolverManager.transactionSigner.address
-        // );
-        // console.log("👤 Order will be signed by:", makerAddress);
-
-        // const result = await resolverManager.deploySrc(deployParams);
-
-        // console.log("✅ Source escrow deployed successfully!");
-        // console.log("📍 Escrow Address:", result.escrowAddress);
-        // console.log("🔗 Transaction Hash:", result.transactionHash);
-
-        // =======================================================
-        // ======================= ETH DST =======================
-        // =======================================================
-
-        const secret = new Uint8Array(32);
-        crypto.getRandomValues(secret);
-        // Hash the secret using keccak256
-        const hashlock = hashSecretWithEthers(secret);
-
         const transactionSignerPrivateKey =
             process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
         const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
         const makerAddress = process.env.MAKER_ADDRESS!;
-
         // Initialize resolver manager with transaction signer
         const resolverManager = new ResolverManager(
             transactionSignerPrivateKey
         );
-
         // Check balances
         const transactionSignerBalance = await resolverManager.checkBalance(
             resolverManager.transactionSigner.address
@@ -2198,27 +2571,68 @@ async function main() {
             transactionSignerBalance,
             "ETH"
         );
-
-        // Deploy destination escrow
-        const orderHash = new Uint8Array(32);
-        crypto.getRandomValues(orderHash);
+        // Deploy source escrow
         const deployParams = {
-            orderHash: orderHash, // Use a random order hash for testing
-            secret: secret, // The secret used to create the hashlock
-            amount: BigInt("1000000"), // 1 ETH in wei
+            secret: secret,
             makerAddress: makerAddress, // Maker's address
-            timeDelays: {
-                srcWithdrawalDelay: 10,
-                srcPublicWithdrawalDelay: 10 * 60,
-                srcCancellationDelay: 15 * 60,
-                srcPublicCancellationDelay: 20 * 60,
-                dstWithdrawalDelay: 10,
-                dstPublicWithdrawalDelay: 10 * 60,
-                dstCancellationDelay: 15 * 60,
-            },
+            makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
+            makeAmount: BigInt("1000000000"), // 1 ETH in wei
+            safetyDeposit: BigInt("0"), // 0.1 ETH in wei
         };
-        const { escrowAddress, transactionHash } =
-            await resolverManager.deployDst(deployParams);
+        console.log("🚀 Deploying source escrow...");
+        console.log(
+            "📝 Transaction will be sent by:",
+            resolverManager.transactionSigner.address
+        );
+        console.log("👤 Order will be signed by:", makerAddress);
+        const result = await resolverManager.deploySrc(deployParams);
+        console.log("✅ Source escrow deployed successfully!");
+        console.log("📍 Escrow Address:", result.escrowAddress);
+        console.log("🔗 Transaction Hash:", result.transactionHash);
+        // =======================================================
+        // ======================= ETH DST =======================
+        // =======================================================
+        // const secret = new Uint8Array(32);
+        // crypto.getRandomValues(secret);
+        // // Hash the secret using keccak256
+        // const hashlock = hashSecretWithEthers(secret);
+        // const transactionSignerPrivateKey =
+        //     process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
+        // const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
+        // const makerAddress = process.env.MAKER_ADDRESS!;
+        // // Initialize resolver manager with transaction signer
+        // const resolverManager = new ResolverManager(
+        //     transactionSignerPrivateKey
+        // );
+        // // Check balances
+        // const transactionSignerBalance = await resolverManager.checkBalance(
+        //     resolverManager.transactionSigner.address
+        // );
+        // console.log(
+        //     "Transaction Signer Balance:",
+        //     transactionSignerBalance,
+        //     "ETH"
+        // );
+        // // Deploy destination escrow
+        // const orderHash = new Uint8Array(32);
+        // crypto.getRandomValues(orderHash);
+        // const deployParams = {
+        //     orderHash: orderHash, // Use a random order hash for testing
+        //     secret: secret, // The secret used to create the hashlock
+        //     amount: BigInt("1000000"), // 1 ETH in wei
+        //     makerAddress: makerAddress, // Maker's address
+        //     timeDelays: {
+        //         srcWithdrawalDelay: 10,
+        //         srcPublicWithdrawalDelay: 10 * 60,
+        //         srcCancellationDelay: 15 * 60,
+        //         srcPublicCancellationDelay: 20 * 60,
+        //         dstWithdrawalDelay: 10,
+        //         dstPublicWithdrawalDelay: 10 * 60,
+        //         dstCancellationDelay: 15 * 60,
+        //     },
+        // };
+        // const { escrowAddress, transactionHash } =
+        //     await resolverManager.deployDst(deployParams);
     } catch (error) {
         console.error("Failed to create order:", error);
         process.exit(1);

@@ -13,9 +13,9 @@ Ts
 
 - [x] Create escrow src on eth
 - [x] Claim escrow on eth
-- [_] Create escrow dst on eth
+- [x] Create escrow dst on eth
 
-- [_] Update to allow multi fill orders 
+- [x] Update to allow multi fill orders 
 
 - [_] Improve aptos design (pre deposit to order)
 
@@ -28,7 +28,6 @@ Ts
 - [_] Implement contracts on SUI ????
 
 
-Saturday: 
 UI
 Tron ??
 Preset token balance for aptos to avoid having user signer 
