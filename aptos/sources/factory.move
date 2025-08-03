@@ -28,7 +28,7 @@ module escrow_factory::order_factory {
     * ------------------------------------------------------------ */
 
     /// Timelock parameters (seconds since Unix epoch)
-    struct Timelock has store, copy {
+    struct Timelock has store, copy, drop {
         withdraw_period_s: u64, // Timestamp when the depositor can withdraw
         public_withdraw_period_s: u64, // Timestamp when the receiver can withdraw
         cancel_period_s: u64, // Timestamp when the depositor can cancel
@@ -45,7 +45,7 @@ module escrow_factory::order_factory {
         timelock: Timelock, // Timelock parameters
         start_timestamp: u64, // Timestamp when the escrow was created
         source: address, // Creator of the escrow
-        escrow_cap: account::SignerCapability // Signer capability for the escrow
+        escrow_cap: account::SignerCapability // Signer capability for the escrow (holds the deposited tokens)
     }
 
     // FusionPlusOrder allowing for multiple escrows to be created to support multi-fill
@@ -54,7 +54,7 @@ module escrow_factory::order_factory {
         recover_timestamp: u64, // Timestamp after which the order value can be recovered
         deposit_amount: u64, // Amount of the asset being deposited
         depositor: address, // Address of the depositor
-        hashlock: vector<u8>, // Keaccak256 hash of the secret
+        hashlock: vector<u8>, // Keaccak256 hash of the secret (or merkle root)
         order_hash: vector<u8>, // Hash of the order parameters
         allow_multi_fill: bool, // Whether the order allows multiple escrows to be created
         whitelisted_addresses: vector<address>, // Addresses that can create escrows for this order
@@ -62,7 +62,7 @@ module escrow_factory::order_factory {
         min_incentive_fee: u64, // Minimum incentive fee for escrow actions
         deposit_asset_type: address, // Address of the deposit asset type
         incentive_fee_asset_type: address, // Address of the incentive fee asset type
-        order_cap: account::SignerCapability
+        order_cap: account::SignerCapability // Signer capability of the order, (holds deposited tokens)
     }
 
     #[event]
@@ -70,7 +70,9 @@ module escrow_factory::order_factory {
         order_address: address,
         depositor: address,
         deposit_amount: u64,
-        order_hash: vector<u8>
+        order_hash: vector<u8>,
+        timelock: Timelock,
+        hashlock: vector<u8>,
     }
 
     #[event]
@@ -96,7 +98,7 @@ module escrow_factory::order_factory {
     }
 
     public entry fun create_order<M: key>(
-        relay: &signer,
+        resolver: &signer,
         account: &signer,
         depositAssetMetadata: object::Object<M>, // Metadata of the deposit asset
         incentive_feeAssetMetadata: object::Object<M>, // Metadata of the incentive fee asset
@@ -113,7 +115,6 @@ module escrow_factory::order_factory {
         cancelPeriod: u64,
         publicCancelPeriod: u64,
     ) {
-        // If the merkle root is not empty, we allow multi-fill
         let incentive_feeAssetMetadataHash =
             aptos_hash::keccak256(bcs::to_bytes(&incentive_feeAssetMetadata));
         let order_hash =
@@ -135,6 +136,12 @@ module escrow_factory::order_factory {
 
         let (vault_signer, cap) = account::create_resource_account(account, order_hash);
         let addr = signer::address_of(account);
+        let timelock = Timelock {
+                withdraw_period_s: withDrawPeriod,
+                public_withdraw_period_s: publicWithDrawPeriod,
+                cancel_period_s: cancelPeriod,
+                public_cancel_period_s: publicCancelPeriod
+            };
         let order = FusionPlusOrder {
             order_cap: cap,
             deposit_amount,
@@ -146,12 +153,7 @@ module escrow_factory::order_factory {
             incentive_fee_asset_type: object::object_address(&incentive_feeAssetMetadata),
             deposit_asset_type: object::object_address(&depositAssetMetadata),
             recover_timestamp: timestamp::now_seconds() + recoverPeriod,
-            timelock: Timelock {
-                withdraw_period_s: withDrawPeriod,
-                public_withdraw_period_s: publicWithDrawPeriod,
-                cancel_period_s: cancelPeriod,
-                public_cancel_period_s: publicCancelPeriod
-            },
+            timelock: timelock,
             allow_multi_fill,
             whitelisted_addresses,
         };
@@ -168,7 +170,7 @@ module escrow_factory::order_factory {
         // Deposit the incentive fee into the vault's primary store
         let incentive_fee_fa: FungibleAsset =
             primary_fungible_store::withdraw(
-                relay, incentive_feeAssetMetadata, recover_incentive_fee
+                resolver, incentive_feeAssetMetadata, recover_incentive_fee
             );
 
         // … and push them into the vault’s primary store
@@ -182,10 +184,11 @@ module escrow_factory::order_factory {
                 order_address: order_address,
                 depositor: addr,
                 deposit_amount,
-                order_hash            
+                order_hash      ,
+                timelock,
+                hashlock,      
             }
         );
-        debug::print(&signer::address_of(&vault_signer));
     }
 
     public entry fun create_escrow_src<M: key, N: key>(
@@ -203,7 +206,7 @@ module escrow_factory::order_factory {
     ) acquires FusionPlusOrder {
         // Find the order and create an escrow signer for it
         assert!(exists<FusionPlusOrder>(order_address), ERESOURCE_DOESNT_EXIST);
-        let order = borrow_global<FusionPlusOrder>(order_address);
+        let order = borrow_global_mut<FusionPlusOrder>(order_address);
         let order_signer = account::create_signer_with_capability(&order.order_cap);
         let escrow_hash =
             aptos_hash::keccak256(
@@ -226,10 +229,6 @@ module escrow_factory::order_factory {
         // If multi fill is not allowed, ensure that the make amount is equal to the deposit amount
         let hashlock;
         if (!order.allow_multi_fill) {
-            // Ensure the leaf is length 0
-            assert!(vector::length(&leaf) == 0, INVALID_HASH_TYPE);
-            // Ensure the proof is length 0
-            assert!(vector::length(&proof) == 0, INVALID_HASH_TYPE);
             // Ensure that the make amount is equal to the deposit amount
             assert!(makeAmount == order.deposit_amount, EINVALID_BALANCE);
             hashlock = order.hashlock;
@@ -239,6 +238,10 @@ module escrow_factory::order_factory {
             ), 8);
             hashlock = leaf;
         };
+
+        // Update the deposit amount in the order
+        order.deposit_amount = order.deposit_amount - makeAmount;
+
 
         // Ensure that the receiver is whitelisted if whitelist exists
         if (vector::length(&order.whitelisted_addresses) > 0) {
@@ -265,15 +268,13 @@ module escrow_factory::order_factory {
             timestamp::now_seconds() < order.recover_timestamp,
             EINVALID_TIMELOCK_STATE
         );
-        debug::print(&b"Creating escrow with hashlock: ");
+
         // Create the escrow object
         let escrow = Escrow {
             incentive_fee,
             deposit: makeAmount,
             hashlock: hashlock,
             depositor: order.depositor,
-            // TODO !!!!!!!!!!!!!!!!!!!!!!11
-            // receiver: receiver,
             receiver: signer::address_of(account),
             start_timestamp: timestamp::now_seconds(),
             timelock: order.timelock,
@@ -331,8 +332,6 @@ module escrow_factory::order_factory {
                 leaf: hashlock
             }
         );
-
-        debug::print(&escrow_address);
     }
 
     public entry fun create_escrow_dst<M: key, N: key>(

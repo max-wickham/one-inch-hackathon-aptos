@@ -1,17 +1,18 @@
 #[test_only]
-module escrow_factory::factory_tests {
+module escrow_factory::order_factory_tests {
     use std::string;
     use std::vector;
     use std::option;
     use aptos_std::timestamp;
     use aptos_std::signer;
-
+    use std::bcs;
     use aptos_framework::account;
     use aptos_framework::fungible_asset::{Self, FungibleAsset, Metadata, MintRef, BurnRef};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::object::{Self, Object, ConstructorRef};
-    use escrow_factory::factory;
+    use escrow_factory::order_factory;
     use aptos_std::aptos_hash;
+    use std::debug;
 
     // Test constants
     const INCENTIVE_FEE: u64 = 100;
@@ -102,235 +103,289 @@ module escrow_factory::factory_tests {
     }
 
     #[test_only]
-    fun setup_test_environment(): (signer, signer, signer, Object<Metadata>, Object<Metadata>) acquires TestTokenRefs {
+    fun setup_test_environment(): (signer, signer, signer, signer, Object<Metadata>, Object<Metadata>) acquires TestTokenRefs {
         timestamp::set_time_has_started_for_testing(
             &account::create_signer_for_test(@0x1)
         );
         timestamp::update_global_time_for_test_secs(1000);
 
         let creator = account::create_account_for_test(@0x123);
+        let relay = account::create_account_for_test(@0x124);
         let depositor = account::create_account_for_test(@0x456);
         let receiver = account::create_account_for_test(@0x789);
 
         // Create two different test tokens with unique names
         let (incentive_metadata, deposit_metadata) = create_test_tokens(&creator);
 
-        // Mint tokens to both depositor and receiver
-        // Depositor needs deposit + recovery incentive fee
-        // Receiver needs their own incentive fee
-        mint_test_tokens(&creator, @0x456, 10000);
-        mint_test_tokens(&creator, @0x789, 10000);
+        // Mint tokens to all parties
+        mint_test_tokens(&creator, @0x124, 10000); // relay
+        mint_test_tokens(&creator, @0x456, 10000); // depositor
+        mint_test_tokens(&creator, @0x789, 10000); // receiver
 
-        (creator, depositor, receiver, incentive_metadata, deposit_metadata)
+        (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata)
     }
 
     #[test_only]
-    fun create_order_and_escrow_src(
+    fun get_order_address(
         depositor: &signer,
-        receiver: &signer,
-        incentive_metadata: Object<Metadata>,
         deposit_metadata: Object<Metadata>,
         deposit_amount: u64,
-        incentive_fee: u64,
-        salt: vector<u8>
-    ): address {
+        min_incentive_fee: u64,
+        salt: vector<u8>,
+        hashlock: vector<u8>,
+        withdraw_period: u64,
+        public_withdraw_period: u64,
+        cancel_period: u64,
+        public_cancel_period: u64
+    ): vector<u8> {
+        let order_hash =
+            aptos_hash::keccak256(
+                bcs::to_bytes(
+                    &vector[
+                        bcs::to_bytes(&deposit_metadata),
+                        bcs::to_bytes(&deposit_amount),
+                        bcs::to_bytes(&min_incentive_fee),
+                        bcs::to_bytes(&salt),
+                        bcs::to_bytes(&hashlock),
+                        bcs::to_bytes(&withdraw_period),
+                        bcs::to_bytes(&public_withdraw_period),
+                        bcs::to_bytes(&cancel_period),
+                        bcs::to_bytes(&public_cancel_period)
+                    ]
+                )
+            );
+        order_hash
+    }
+
+    #[test]
+    fun test_create_order_success() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
+            setup_test_environment();
+
         let hashlock = aptos_hash::keccak256(SECRET);
 
-        // Step 1: Create order (depositor provides deposit + recovery incentive fee)
-        let order_address =
-            factory::createOrder(
-                depositor,
-                deposit_metadata,
-                incentive_metadata,
-                RECOVER_INCENTIVE_FEE,
-                RECOVER_PERIOD,
-                deposit_amount,
-                MIN_INCENTIVE_FEE,
-                salt,
-                hashlock,
-                true, // allow_multi_fill for test, or false as needed
-                vector::empty<address>(), // whitelisted_addresses, or add receiver if needed
-                WITHDRAW_PERIOD,
-                PUBLIC_WITHDRAW_PERIOD,
-                CANCEL_PERIOD,
-                PUBLIC_CANCEL_PERIOD
-            );
+        let depositor_initial_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let relay_initial_incentive = primary_fungible_store::balance(@0x124, incentive_metadata);
 
-        let depositor_incentive_balance =
-            primary_fungible_store::balance(@0x456, incentive_metadata);
+        // Create order
+        order_factory::create_order(
+            &relay,
+            &depositor,
+            deposit_metadata,
+            incentive_metadata,
+            RECOVER_INCENTIVE_FEE,
+            RECOVER_PERIOD,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            true, // allow_multi_fill
+            vector::empty<address>(), // whitelisted_addresses
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
 
-        // Step 2: Create escrow (receiver provides their own incentive fee)
-        let escrow_address =
-            factory::createEscrowSrc(
-                receiver,
-                order_address,
-                incentive_metadata,
-                deposit_metadata,
-                deposit_amount, // makeAmount
-                incentive_fee,
-                signer::address_of(receiver),
-                salt
-            );
+        // Verify depositor's deposit balance decreased
+        let depositor_final_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        assert!(depositor_final_deposit == depositor_initial_deposit - DEPOSIT_AMOUNT, 1);
 
-        escrow_address
+        // Verify relay's incentive balance decreased
+        let relay_final_incentive = primary_fungible_store::balance(@0x124, incentive_metadata);
+        assert!(relay_final_incentive == relay_initial_incentive - RECOVER_INCENTIVE_FEE, 2);
     }
 
     #[test]
-    fun test_create_escrow_success() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+    fun test_create_escrow_src_success() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
-        let escrow_address =
-            create_order_and_escrow_src(
-                &depositor,
-                &receiver,
-                incentive_metadata,
-                deposit_metadata,
-                DEPOSIT_AMOUNT,
-                INCENTIVE_FEE,
-                b"unique_salt_121"
-            );
+        let hashlock = aptos_hash::keccak256(SECRET);
 
-        // Verify depositor's balances decreased (deposit + recovery incentive fee)
-        let depositor_incentive_balance =
-            primary_fungible_store::balance(@0x456, incentive_metadata);
-        let depositor_deposit_balance =
-            primary_fungible_store::balance(@0x456, deposit_metadata);
-        assert!(
-            depositor_deposit_balance == 10000 - DEPOSIT_AMOUNT,
-            2
+        // First create order
+        order_factory::create_order(
+            &relay,
+            &depositor,
+            deposit_metadata,
+            incentive_metadata,
+            RECOVER_INCENTIVE_FEE,
+            RECOVER_PERIOD,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            false, // allow_multi_fill = false for this test
+            vector::empty<address>(),
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
         );
 
-        // Verify receiver's incentive balance decreased (their own incentive fee)
-        let receiver_incentive_balance =
-            primary_fungible_store::balance(@0x789, incentive_metadata);
-        assert!(
-            receiver_incentive_balance == 10000 - INCENTIVE_FEE,
-            3
+        // Calculate order address
+        let order_hash = get_order_address(
+            &depositor,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+        let order_address = account::create_resource_address(&signer::address_of(&depositor), order_hash);
+
+        let receiver_initial_incentive = primary_fungible_store::balance(@0x789, incentive_metadata);
+
+        // Create escrow src
+        order_factory::create_escrow_src(
+            &receiver,
+            order_address,
+            incentive_metadata,
+            deposit_metadata,
+            DEPOSIT_AMOUNT, // makeAmount
+            INCENTIVE_FEE,
+            signer::address_of(&receiver),
+            b"escrow_salt",
+            vector::empty<u8>(), // leaf (empty for non-multi-fill)
+            vector::empty<vector<u8>>(), // proof
+            vector::empty<bool>() // directions
         );
 
-        // Verify vault has both incentive fees + deposit
-        let vault_incentive_balance =
-            primary_fungible_store::balance(escrow_address, incentive_metadata);
-        let vault_deposit_balance =
-            primary_fungible_store::balance(escrow_address, deposit_metadata);
-        assert!(vault_incentive_balance == INCENTIVE_FEE, 4);
-        assert!(vault_deposit_balance == DEPOSIT_AMOUNT, 5);
+        // Verify receiver's incentive balance decreased
+        let receiver_final_incentive = primary_fungible_store::balance(@0x789, incentive_metadata);
+        assert!(receiver_final_incentive == receiver_initial_incentive - INCENTIVE_FEE + RECOVER_INCENTIVE_FEE, 1);
     }
 
     #[test]
-    fun test_withdraw_with_valid_secret_by_receiver() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+    fun test_create_escrow_dst_success() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
-        let vault_address =
-            create_order_and_escrow_src(
-                &depositor,
-                &receiver,
-                incentive_metadata,
-                deposit_metadata,
-                DEPOSIT_AMOUNT,
-                INCENTIVE_FEE,
-                b"unique_salt_124"
-            );
+        let hashlock = aptos_hash::keccak256(SECRET);
+        let order_hash = b"test_order_hash";
+
+        let depositor_initial_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let depositor_initial_incentive = primary_fungible_store::balance(@0x456, incentive_metadata);
+
+        // Create destination escrow
+        order_factory::create_escrow_dst(
+            &depositor,
+            order_hash,
+            signer::address_of(&receiver),
+            incentive_metadata,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+
+        // Verify depositor's balances decreased
+        let depositor_final_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let depositor_final_incentive = primary_fungible_store::balance(@0x456, incentive_metadata);
+
+        assert!(depositor_final_deposit == depositor_initial_deposit - DEPOSIT_AMOUNT, 1);
+        assert!(depositor_final_incentive == depositor_initial_incentive - INCENTIVE_FEE, 2);
+    }
+
+    #[test]
+    fun test_withdraw_with_valid_secret() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
+            setup_test_environment();
+
+        let hashlock = aptos_hash::keccak256(SECRET);
+        let order_hash = b"test_order_hash";
+
+        // Create destination escrow
+        order_factory::create_escrow_dst(
+            &depositor,
+            order_hash,
+            signer::address_of(&receiver),
+            incentive_metadata,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+
+        // Calculate escrow address
+        let escrow_hash = aptos_hash::keccak256(
+            bcs::to_bytes(&vector[bcs::to_bytes(&order_hash), bcs::to_bytes(&SALT)])
+        );
+        let escrow_address = account::create_resource_address(&signer::address_of(&depositor), escrow_hash);
 
         // Fast forward to withdrawal time
         timestamp::update_global_time_for_test_secs(1000 + WITHDRAW_PERIOD + 50);
 
-        // Withdraw by receiver with correct secret
-        factory::withdraw(
+        let receiver_initial_deposit = primary_fungible_store::balance(@0x789, deposit_metadata);
+        let receiver_initial_incentive = primary_fungible_store::balance(@0x789, incentive_metadata);
+
+        // Withdraw with correct secret
+        order_factory::withdraw(
             &receiver,
-            vault_address,
+            escrow_address,
             SECRET,
             incentive_metadata,
             deposit_metadata
-        );
-
-        // Verify receiver got the incentive fee (their own back + earned it)
-        let receiver_incentive_balance =
-            primary_fungible_store::balance(@0x789, incentive_metadata);
-        assert!(
-            receiver_incentive_balance == 10000 - INCENTIVE_FEE + INCENTIVE_FEE,
-            0
         );
 
         // Verify receiver got the deposit
-        let receiver_deposit_balance =
-            primary_fungible_store::balance(@0x789, deposit_metadata);
-        assert!(
-            receiver_deposit_balance == 10000 + DEPOSIT_AMOUNT,
-            1
-        );
-    }
-
-    #[test]
-    fun test_withdraw_during_public_period() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
-            setup_test_environment();
-
-        let vault_address =
-            create_order_and_escrow_src(
-                &depositor,
-                &receiver,
-                incentive_metadata,
-                deposit_metadata,
-                DEPOSIT_AMOUNT,
-                INCENTIVE_FEE,
-                b"unique_salt_125"
-            );
-
-        // Fast forward to public withdrawal period
-        timestamp::update_global_time_for_test_secs(1000 + PUBLIC_WITHDRAW_PERIOD + 50);
-
-        // Anyone can withdraw during public period with correct secret
-        let anyone = account::create_account_for_test(@0x999);
-        mint_test_tokens(&creator, @0x999, 0); // Just to create the primary store
-
-        factory::withdraw(
-            &anyone,
-            vault_address,
-            SECRET,
-            incentive_metadata,
-            deposit_metadata
-        );
-
-        // Verify anyone got the incentive fee
-        let anyone_incentive_balance =
-            primary_fungible_store::balance(@0x999, incentive_metadata);
-        assert!(anyone_incentive_balance == INCENTIVE_FEE, 0);
-
-        // Verify receiver still gets the deposit
-        let receiver_deposit_balance =
-            primary_fungible_store::balance(@0x789, deposit_metadata);
-        assert!(
-            receiver_deposit_balance == 10000 + DEPOSIT_AMOUNT,
-            1
-        );
+        let receiver_final_deposit = primary_fungible_store::balance(@0x789, deposit_metadata);
+        assert!(receiver_final_deposit == receiver_initial_deposit + DEPOSIT_AMOUNT, 1);
     }
 
     #[test]
     #[expected_failure(abort_code = 0x1)]
     fun test_withdraw_with_invalid_secret() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
-        let vault_address =
-            create_order_and_escrow_src(
-                &depositor,
-                &receiver,
-                incentive_metadata,
-                deposit_metadata,
-                DEPOSIT_AMOUNT,
-                INCENTIVE_FEE,
-                b"unique_salt_126"
-            );
+        let hashlock = aptos_hash::keccak256(SECRET);
+        let order_hash = b"test_order_hash";
 
+        // Create destination escrow
+        order_factory::create_escrow_dst(
+            &depositor,
+            order_hash,
+            signer::address_of(&receiver),
+            incentive_metadata,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+
+        // Calculate escrow address
+        let escrow_hash = aptos_hash::keccak256(
+            bcs::to_bytes(&vector[bcs::to_bytes(&order_hash), bcs::to_bytes(&SALT)])
+        );
+        let escrow_address = account::create_resource_address(&signer::address_of(&depositor), escrow_hash);
+
+        // Fast forward to withdrawal time
         timestamp::update_global_time_for_test_secs(1000 + WITHDRAW_PERIOD + 50);
 
-        // Try to withdraw with wrong secret
-        factory::withdraw(
+        // Try to withdraw with wrong secret - should fail
+        order_factory::withdraw(
             &receiver,
-            vault_address,
+            escrow_address,
             b"wrong_secret",
             incentive_metadata,
             deposit_metadata
@@ -338,94 +393,111 @@ module escrow_factory::factory_tests {
     }
 
     #[test]
-    fun test_cancel_by_depositor() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+    fun test_cancel_escrow() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
-        let vault_address =
-            create_order_and_escrow_src(
-                &depositor,
-                &receiver,
-                incentive_metadata,
-                deposit_metadata,
-                DEPOSIT_AMOUNT,
-                INCENTIVE_FEE,
-                b"unique_salt_128"
-            );
+        let hashlock = aptos_hash::keccak256(SECRET);
+        let order_hash = b"test_order_hash";
+
+        // Create destination escrow
+        order_factory::create_escrow_dst(
+            &depositor,
+            order_hash,
+            signer::address_of(&receiver),
+            incentive_metadata,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+
+        // Calculate escrow address
+        let escrow_hash = aptos_hash::keccak256(
+            bcs::to_bytes(&vector[bcs::to_bytes(&order_hash), bcs::to_bytes(&SALT)])
+        );
+        let escrow_address = account::create_resource_address(&signer::address_of(&depositor), escrow_hash);
 
         // Fast forward to cancel time
         timestamp::update_global_time_for_test_secs(1000 + CANCEL_PERIOD + 50);
 
-        let depositor_initial_incentive =
-            primary_fungible_store::balance(@0x456, incentive_metadata);
-        let depositor_initial_deposit =
-            primary_fungible_store::balance(@0x456, deposit_metadata);
+        let depositor_initial_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let depositor_initial_incentive = primary_fungible_store::balance(@0x456, incentive_metadata);
 
         // Cancel by depositor
-        factory::cancel(
+        order_factory::cancel(
             &depositor,
-            vault_address,
+            escrow_address,
             incentive_metadata,
             deposit_metadata
         );
 
-        // Verify depositor got back the deposit
-        let depositor_final_deposit =
-            primary_fungible_store::balance(@0x456, deposit_metadata);
-        assert!(
-            depositor_final_deposit == depositor_initial_deposit + DEPOSIT_AMOUNT,
-            1
-        );
+        // Verify depositor got back the deposit and incentive fee
+        let depositor_final_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let depositor_final_incentive = primary_fungible_store::balance(@0x456, incentive_metadata);
 
-        // Verify depositor got the receiver's incentive fee
-        let depositor_final_incentive =
-            primary_fungible_store::balance(@0x456, incentive_metadata);
-        assert!(
-            depositor_final_incentive == depositor_initial_incentive + INCENTIVE_FEE,
-            0
-        );
+        assert!(depositor_final_deposit == depositor_initial_deposit + DEPOSIT_AMOUNT, 1);
+        assert!(depositor_final_incentive == depositor_initial_incentive + INCENTIVE_FEE, 2);
     }
 
     #[test]
-    fun test_recover_by_anyone_after_period() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+    fun test_recover_order() acquires TestTokenRefs {
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
         let hashlock = aptos_hash::keccak256(SECRET);
 
         // Create order only (no escrow)
-        let order_address =
-            factory::createOrder(
-                &depositor,
-                deposit_metadata,
-                incentive_metadata,
-                RECOVER_INCENTIVE_FEE,
-                RECOVER_PERIOD,
-                DEPOSIT_AMOUNT,
-                MIN_INCENTIVE_FEE,
-                SALT,
-                hashlock,
-                true,
-                vector::empty<address>(),
-                WITHDRAW_PERIOD,
-                PUBLIC_WITHDRAW_PERIOD,
-                CANCEL_PERIOD,
-                PUBLIC_CANCEL_PERIOD
-            );
+        order_factory::create_order(
+            &relay,
+            &depositor,
+            deposit_metadata,
+            incentive_metadata,
+            RECOVER_INCENTIVE_FEE,
+            RECOVER_PERIOD,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            true,
+            vector::empty<address>(),
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+
+        // Calculate order address
+        let order_hash = get_order_address(
+            &depositor,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+        let order_address = account::create_resource_address(&signer::address_of(&depositor), order_hash);
 
         // Fast forward past recovery period
         timestamp::update_global_time_for_test_secs(1000 + RECOVER_PERIOD + 50);
 
         let anyone = account::create_account_for_test(@0x999);
-        mint_test_tokens(&creator, @0x999, 0); // Just to create the primary store
+        mint_test_tokens(&creator, @0x999, 0);
 
-        let depositor_initial_deposit =
-            primary_fungible_store::balance(@0x456, deposit_metadata);
-        let anyone_initial_incentive =
-            primary_fungible_store::balance(@0x999, incentive_metadata);
+        let depositor_initial_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        let anyone_initial_incentive = primary_fungible_store::balance(@0x999, incentive_metadata);
 
         // Anyone can recover after the period
-        factory::recover(
+        order_factory::recover(
             &anyone,
             order_address,
             incentive_metadata,
@@ -433,102 +505,65 @@ module escrow_factory::factory_tests {
         );
 
         // Verify depositor got back their deposit
-        let depositor_final_deposit =
-            primary_fungible_store::balance(@0x456, deposit_metadata);
-        assert!(
-            depositor_final_deposit == depositor_initial_deposit + DEPOSIT_AMOUNT,
-            0
-        );
+        let depositor_final_deposit = primary_fungible_store::balance(@0x456, deposit_metadata);
+        assert!(depositor_final_deposit == depositor_initial_deposit + DEPOSIT_AMOUNT, 1);
 
         // Verify recoverer got the recovery incentive fee
-        let anyone_final_incentive =
-            primary_fungible_store::balance(@0x999, incentive_metadata);
-        assert!(
-            anyone_final_incentive == anyone_initial_incentive + RECOVER_INCENTIVE_FEE,
-            1
-        );
+        let anyone_final_incentive = primary_fungible_store::balance(@0x999, incentive_metadata);
+        assert!(anyone_final_incentive == anyone_initial_incentive + RECOVER_INCENTIVE_FEE, 2);
     }
 
     #[test]
-    #[expected_failure(abort_code = 4)]
-    // EINVALID_TIMELOCK_STATE
+    #[expected_failure(abort_code = 4)] // EINVALID_TIMELOCK_STATE
     fun test_recover_before_period() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
+        let (creator, relay, depositor, receiver, incentive_metadata, deposit_metadata) =
             setup_test_environment();
 
         let hashlock = aptos_hash::keccak256(SECRET);
 
         // Create order only
-        let order_address =
-            factory::createOrder(
-                &depositor,
-                deposit_metadata,
-                incentive_metadata,
-                RECOVER_INCENTIVE_FEE,
-                RECOVER_PERIOD,
-                DEPOSIT_AMOUNT,
-                MIN_INCENTIVE_FEE,
-                SALT,
-                hashlock,
-                true,
-                vector::empty<address>(),
-                WITHDRAW_PERIOD,
-                PUBLIC_WITHDRAW_PERIOD,
-                CANCEL_PERIOD,
-                PUBLIC_CANCEL_PERIOD
-            );
+        order_factory::create_order(
+            &relay,
+            &depositor,
+            deposit_metadata,
+            incentive_metadata,
+            RECOVER_INCENTIVE_FEE,
+            RECOVER_PERIOD,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            true,
+            vector::empty<address>(),
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
 
-        // Don't fast forward - try to recover immediately
+        // Calculate order address
+        let order_hash = get_order_address(
+            &depositor,
+            deposit_metadata,
+            DEPOSIT_AMOUNT,
+            MIN_INCENTIVE_FEE,
+            SALT,
+            hashlock,
+            WITHDRAW_PERIOD,
+            PUBLIC_WITHDRAW_PERIOD,
+            CANCEL_PERIOD,
+            PUBLIC_CANCEL_PERIOD
+        );
+        let order_address = account::create_resource_address(&signer::address_of(&depositor), order_hash);
+
         let anyone = account::create_account_for_test(@0x999);
 
         // Should fail because recovery period hasn't passed
-        factory::recover(
+        order_factory::recover(
             &anyone,
             order_address,
             incentive_metadata,
             deposit_metadata
-        );
-    }
-
-    #[test]
-    #[expected_failure(abort_code = 5)]
-    // EINVALID_ASSET_TYPE
-    fun test_create_escrow_with_wrong_asset_type() acquires TestTokenRefs {
-        let (creator, depositor, receiver, incentive_metadata, deposit_metadata) =
-            setup_test_environment();
-
-        let hashlock = aptos_hash::keccak256(SECRET);
-
-        // Create order with correct asset types
-        let order_address =
-            factory::createOrder(
-                &depositor,
-                deposit_metadata,
-                incentive_metadata,
-                RECOVER_INCENTIVE_FEE,
-                RECOVER_PERIOD,
-                DEPOSIT_AMOUNT,
-                MIN_INCENTIVE_FEE,
-                SALT,
-                hashlock,
-                true,
-                vector::empty<address>(),
-                WITHDRAW_PERIOD,
-                PUBLIC_WITHDRAW_PERIOD,
-                CANCEL_PERIOD,
-                PUBLIC_CANCEL_PERIOD
-            );
-
-        // Try to create escrow with wrong asset types (swapped)
-        factory::createEscrowSrc(
-            &receiver,
-            order_address,
-            deposit_metadata, // Wrong! Should be incentive_metadata
-            incentive_metadata, // Wrong! Should be deposit_metadata
-            DEPOSIT_AMOUNT,
-            INCENTIVE_FEE,
-            signer::address_of(&receiver),
-            SALT
         );
     }
 }

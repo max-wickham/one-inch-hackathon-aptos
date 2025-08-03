@@ -12,9 +12,9 @@ import { time } from "console";
 import * as dotenv from "dotenv";
 import { keccak256, SigningKey, toUtf8Bytes } from "ethers";
 import { ethers, Contract, Wallet, Provider } from "ethers";
+
 // Load environment variables
 dotenv.config();
-
 class AptosOrderManager {
     private aptos: Aptos;
     private userAccount: Account;
@@ -541,6 +541,7 @@ class ResolverManager {
 
     constructor(transactionSignerPrivateKey: string) {
         // Initialize provider and transaction signer
+        console.log(process.env.RPC_URL);
         this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL!);
         this.transactionSigner = new ethers.Wallet(
             transactionSignerPrivateKey,
@@ -557,6 +558,7 @@ class ResolverManager {
         };
 
         // Initialize resolver contract with transaction signer
+        console.log("Resolver", this.addresses.resolver);
         this.resolver = new ethers.Contract(
             this.addresses.resolver,
             [
@@ -1660,10 +1662,6 @@ class ResolverManager {
             value,
             deadline
         );
-        console.log("Owner");
-        console.log("👤 Owner address:", owner);
-        console.log("👤 Spender address:", spender);
-        console.log("Token address:", tokenAddress);
         const tokenABI = [
             "function balanceOf(address owner) view returns (uint256)",
         ];
@@ -1673,10 +1671,6 @@ class ResolverManager {
             this.provider
         );
         const balance = await tokenContract.balanceOf(owner);
-        console.log("👤 Owner balance:", ethers.formatEther(balance), "ETH");
-
-        console.log("🔍 Permit digest:", permitDigest);
-
         // Create SigningKey and sign the RAW hash (no prefix)
         const signingKey = new SigningKey(ownerPrivateKey);
         const { v, r, s } = signingKey.sign(permitDigest); // ✅ Signs raw hash
@@ -1693,7 +1687,6 @@ class ResolverManager {
             deadline
         );
 
-        console.log("✍️ Permit signature:", compactSig);
         return compactSig;
     }
 
@@ -1702,13 +1695,9 @@ class ResolverManager {
         orderHash: string,
         makerPrivateKey: string
     ): Promise<{ v: number; r: string; s: string }> {
-        console.log("🔍 Order hash:", orderHash);
-
         // Create SigningKey and sign the RAW hash (no prefix)
         const signingKey = new SigningKey(makerPrivateKey);
         const signature = signingKey.sign(orderHash); // ✅ Signs raw hash
-
-        console.log("✍️ Order signature object:", signature);
 
         // ✅ Return in the format expected by Solidity
         return {
@@ -1744,7 +1733,8 @@ class ResolverManager {
             dstPublicWithdrawalDelay: 10 * 60,
             dstCancellationDelay: 15 * 60,
         };
-
+        console.log("⏳ Using time delays:", delays);
+        console.log("");
         const timelocks = await this.resolver.getDefaultTimelock(
             delays.srcWithdrawalDelay,
             delays.srcPublicWithdrawalDelay,
@@ -1765,7 +1755,7 @@ class ResolverManager {
             {
                 // value: params.safetyDeposit || 0n,
                 gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
-                gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+                gasPrice: ethers.parseUnits("1", "gwei"), // ✅ Set manual gas price
             }
         );
         const receipt = await tx.wait();
@@ -1792,7 +1782,7 @@ class ResolverManager {
             {
                 // value: params.safetyDeposit || 0n,
                 gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
-                gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
+                gasPrice: ethers.parseUnits("1", "gwei"), // ✅ Set manual gas price
             }
         );
         const receipt = await tx.wait();
@@ -1816,17 +1806,11 @@ class ResolverManager {
         };
     }): Promise<{ escrowAddress: string; transactionHash: string }> {
         try {
-            console.log("🚀 Starting deploySrc process...");
-            console.log(
-                "📝 Transaction signer:",
-                this.transactionSigner.address
-            );
-            console.log("👤 Order maker:", params.makerAddress);
+            console.log("Starting deploySrc process...");
             // const secret = ethers.keccak256(params.secret);
             const secret = params.secret;
             // Step 1: Generate hashlock from secret
             const hashlock = ethers.keccak256(secret);
-            console.log("🔒 Hashlock generated:", hashlock);
 
             // Step 2: Get default timelock
             const delays = params.timeDelays || {
@@ -1849,20 +1833,12 @@ class ResolverManager {
                 delays.dstCancellationDelay
             );
 
-            console.log("⏳ Timelocks", timelocks);
-
             const extraDataArgs = await this.resolver.getExtraDataArgs(
                 hashlock,
                 timelocks
             );
 
-            console.log("ExtraDataArgs:", extraDataArgs);
-
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-            console.log("📝 Creating permit signature...");
-            console.log("   Owner (maker):", params.makerAddress);
-            console.log("   Spender (LOP):", this.addresses.lop);
-
             // Check the balance of the maker address is high enough using erc20
 
             const permit = await this.createPermitSignature(
@@ -1881,12 +1857,7 @@ class ResolverManager {
             );
             const extensions = extensionsT;
 
-            console.log("Extensions data:", extensionsT);
-
-            // Step 6: Get extensions hash and create order
             const extensionsHash = ethers.keccak256(extensions);
-
-            console.log("Extensions hash:", extensionsHash);
 
             const order = await this.resolver.getOrder(
                 extensionsHash,
@@ -1895,20 +1866,12 @@ class ResolverManager {
                 this.addresses.takerToken,
                 params.makeAmount
             );
-            console.log("Order data:", order);
             const orderHash = await this.resolver.getOrderHash([...order]);
-
-            console.log("Order", order);
-            console.log("🔍 Order hash:", orderHash);
-            console.log("📝 Creating order signature...");
-            console.log("   Order signer (maker):", params.makerAddress);
-
             const { v, r, s } = await this.createOrderSignature(
                 orderHash,
                 params.makerPrivateKey // Maker signs the order
             );
 
-            console.log("Order signature:", { v, r, s });
             const isValidSig = await this.resolver.isValidOrderSig(
                 [...order],
                 v,
@@ -1916,9 +1879,7 @@ class ResolverManager {
                 s,
                 params.makerAddress // Maker address
             );
-            console.log("✅ Order signature valid:", isValidSig);
 
-            // Step 8: Get immutables
             const immutablesData = await this.resolver.getImmutables(
                 orderHash,
                 hashlock,
@@ -1928,14 +1889,6 @@ class ResolverManager {
                 timelocks
             );
             const immutables = immutablesData;
-            console.log("Immutables data:", immutables);
-
-            // Step 9: Call deploySrc (transaction signer calls the resolver)
-            console.log("📝 Calling deploySrc with transaction signer...");
-            console.log(
-                "   Transaction will be sent by:",
-                this.transactionSigner.address
-            );
 
             const val = await this.resolver.isValidOrderSig(
                 [...order],
@@ -1944,12 +1897,9 @@ class ResolverManager {
                 s,
                 params.makerAddress // Maker address
             );
-            console.log("✅ Order signature valid:", val);
             const hash = await this.resolver.getOrderHash([...order]);
-            console.log("Order hash:", hash);
 
             // ✅ Deploy the source contract with all parameters
-            console.log("⏳ Deploying source contract...");
             const tx = await this.resolver.deploySrc(
                 [...order],
                 v,
@@ -1965,30 +1915,16 @@ class ResolverManager {
                     gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
                 }
             );
-
-            console.log("⏳ Transaction submitted:", tx.hash);
             const receipt = await tx.wait();
-            console.log("✅ Transaction confirmed!", receipt);
+            console.log(
+                "✅ Eth Escrow Deployment Transaction confirmed!",
+                tx.hash
+            );
 
             const escrowAddress: string = await this.resolver.getEscrowAddress(
                 orderHash
             );
             console.log("Escrow address:", escrowAddress);
-            // Wait for 6 seconds to ensure the contract is deployed
-            // await new Promise((resolve) =>
-            //     setTimeout(resolve, delays.srcWithdrawalDelay * 1000 + 1000)
-            // );
-            // // Call withdraw
-
-            // await this.resolver.withdraw(
-            //     secret, // The secret used to create the hashlock
-            //     escrowAddress, // The escrow address returned from deploySrc
-            //     {
-            //         // value: params.safetyDeposit || 0n,
-            //         gasLimit: 5000000n, // ✅ Set high manual gas limit (5M gas)
-            //         gasPrice: ethers.parseUnits("20", "gwei"), // ✅ Set manual gas price
-            //     }
-            // );
 
             return {
                 escrowAddress,
@@ -2000,7 +1936,10 @@ class ResolverManager {
         }
     }
 
-    async withdraw_src(secret: Uint8Array, escrowAddress: string): Promise<string> {
+    async withdraw_src(
+        secret: Uint8Array,
+        escrowAddress: string
+    ): Promise<string> {
         const tx = await this.resolver.withdraw(
             secret, // The secret used to create the hashlock
             escrowAddress, // The escrow address returned from deploySrc
@@ -2221,9 +2160,9 @@ async function apt_to_eth(aptos_amount: bigint, eth_amount: bigint) {
     console.log("##############################\n");
     const orderParams = {
         depositAssetMetadata:
-            "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-        incentive_feeAssetMetadata:
             "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
+        incentive_feeAssetMetadata:
+            "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
         recover_incentive_fee: 10, // 0.01 APT (in octas)
         recoverPeriod: 86400, // 24 hours in seconds
         deposit_amount: Number(aptos_amount), // 1 APT (in octas)
@@ -2253,9 +2192,9 @@ async function apt_to_eth(aptos_amount: bigint, eth_amount: bigint) {
         const escrowParams = {
             orderAddress: orderResult.orderAddress,
             depositAssetMetadata:
-                "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-            incentive_feeAssetMetadata:
                 "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
+            incentive_feeAssetMetadata:
+                "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
             makeAmount: Number(aptos_amount / BigInt(4)), // 0.5 tokens (half of the order amount)
             incentiveFee: 20, // 0.002 tokens
             receiver:
@@ -2324,22 +2263,24 @@ async function apt_to_eth(aptos_amount: bigint, eth_amount: bigint) {
 }
 
 async function eth_to_apt(eth_amount: bigint, aptos_amount: bigint) {
-
     const orderManager = new AptosOrderManager();
     const transactionSignerPrivateKey =
         process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
     const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
     const makerAddress = process.env.MAKER_ADDRESS!;
     // Initialize resolver manager with transaction signer
-    const resolverManager = new ResolverManager(
-        transactionSignerPrivateKey
-    );
+    const resolverManager = new ResolverManager(transactionSignerPrivateKey);
     const secret = new Uint8Array(32);
     crypto.getRandomValues(secret);
     // Hash the secret using keccak256
     const hashlock = hashSecretWithEthers(secret);
     const withdrawPeriod = 10; // 6 seconds for testing
-    // // Deploy source escrow
+
+    console.log("\n\n##############################");
+    console.log("Creating Escrows");
+    console.log("##############################\n");
+
+    // Deploy source escrow
     const deployParams = {
         secret: secret,
         makerAddress: makerAddress, // Maker's address
@@ -2347,40 +2288,42 @@ async function eth_to_apt(eth_amount: bigint, aptos_amount: bigint) {
         makeAmount: eth_amount, // 1 ETH in wei
         safetyDeposit: BigInt("0"), // 0.1 ETH in wei
         timeDelays: {
-                srcWithdrawalDelay: withdrawPeriod,
-                srcPublicWithdrawalDelay: 10 * 60,
-                srcCancellationDelay: 15 * 60,
-                srcPublicCancellationDelay: 20 * 60,
-                dstWithdrawalDelay: withdrawPeriod,
-                dstPublicWithdrawalDelay: 10 * 60,
-                dstCancellationDelay: 15 * 60,
-            },
+            srcWithdrawalDelay: withdrawPeriod,
+            srcPublicWithdrawalDelay: 10 * 60,
+            srcCancellationDelay: 15 * 60,
+            srcPublicCancellationDelay: 20 * 60,
+            dstWithdrawalDelay: withdrawPeriod,
+            dstPublicWithdrawalDelay: 10 * 60,
+            dstCancellationDelay: 15 * 60,
+        },
     };
     const result = await resolverManager.deploySrc(deployParams);
 
-            // Example order parameters
-        const escrowParams = {
-            order_hash: new Uint8Array(32), // Replace with actual order hash
-            depositAssetMetadata:
-                "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-            incentive_feeAssetMetadata:
-                "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e",
-            deposit_amount: 1000,
-            incentive_fee: 10,
-            hashlock: hashlock,
-            withDrawPeriod: withdrawPeriod,
-            publicWithDrawPeriod: 7200,
-            cancelPeriod: 86400,
-            publicCancelPeriod: 172800,
-        };
-        const escrowResult = await orderManager.createEscrowDst(escrowParams);
-        console.log("Escrow created:", escrowResult.escrowAddress);
+    // Example order parameters
+    const escrowParams = {
+        order_hash: new Uint8Array(32), // Replace with actual order hash
+        depositAssetMetadata:
+            "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
+        incentive_feeAssetMetadata:
+            "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e",
+        deposit_amount: Number(aptos_amount), // 1 APT (in octas)
+        incentive_fee: 10,
+        hashlock: hashlock,
+        withDrawPeriod: withdrawPeriod,
+        publicWithDrawPeriod: 7200,
+        cancelPeriod: 86400,
+        publicCancelPeriod: 172800,
+    };
+    const escrowResult = await orderManager.createEscrowDst(escrowParams);
+    console.log("Escrow created:", escrowResult.escrowAddress);
 
-
-
-    await new Promise((resolve) =>
-        setTimeout(resolve, withdrawPeriod * 1000) // Wait for 6 seconds to ensure the contract is deployed
+    await new Promise(
+        (resolve) => setTimeout(resolve, withdrawPeriod * 1000) // Wait for 6 seconds to ensure the contract is deployed
     );
+
+    console.log("\n\n##############################");
+    console.log("Withdrawing");
+    console.log("##############################\n");
 
     const tx = await resolverManager.withdraw_src(
         secret, // The secret used to create the hashlock
@@ -2388,14 +2331,12 @@ async function eth_to_apt(eth_amount: bigint, aptos_amount: bigint) {
     );
 
     const withdrawParams = {
-            escrowAddress: escrowResult.escrowAddress,
-            secret: secret, // The same secret used to create the order hashlock
-            incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
-            depositAssetMetadata: escrowParams.depositAssetMetadata,
-        };
-    const withdrawResult = await orderManager.withdrawAssets(
-        withdrawParams
-    );
+        escrowAddress: escrowResult.escrowAddress,
+        secret: secret, // The same secret used to create the order hashlock
+        incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
+        depositAssetMetadata: escrowParams.depositAssetMetadata,
+    };
+    const withdrawResult = await orderManager.withdrawAssets(withdrawParams);
 
     console.log("✅ Withdrawal On Eth TX:", tx);
     console.log("✅ Withdrawal On Apt TX:", withdrawResult.transactionHash);
@@ -2404,235 +2345,8 @@ async function eth_to_apt(eth_amount: bigint, aptos_amount: bigint) {
 // Example usage
 async function main() {
     try {
-        // apt_to_eth(BigInt("1000"), BigInt("100000000000")); // 1 APT to 1 ETH
-        eth_to_apt(BigInt("100000000000"), BigInt("1000")); // 1 ETH to 1 APT
-        return;
-        // =======================================================
-        // ======================= APT SRC =======================
-        // =======================================================
-        // const orderManager = new AptosOrderManager();
-        // // // Check account balances first
-        // await orderManager.checkAccountBalances();
-        // // Random secret bytes of length 32
-        const secret = new Uint8Array(32);
-        crypto.getRandomValues(secret);
-        // // Hash the secret using keccak256
-        // const hashlock = hashSecretWithEthers(secret);
-        // const withdrawPeriod = 1; // 6 seconds for testing
-        // const merklePreimages = [
-        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf1"))),
-        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf2"))),
-        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf3"))),
-        //     ethers.getBytes(keccak256(ethers.encodeBytes32String("leaf4")))
-        // ];
-        // // Create a Merkle tree with the preimages
-        // const merkleTree = new MerkleTree(merklePreimages);
-        // console.log("Merkle Root:", merkleTree.getRoot());
-        // const root = merkleTree.getRootBytes();
-        // // Example order parameters
-        // const orderParams = {
-        //     depositAssetMetadata:
-        //         "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-        //     incentive_feeAssetMetadata:
-        //         "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
-        //     recover_incentive_fee: 10, // 0.01 APT (in octas)
-        //     recoverPeriod: 86400, // 24 hours in seconds
-        //     deposit_amount: 100, // 1 APT (in octas)
-        //     min_incentive_fee: 10, // 0.001 APT (in octas)
-        //     // salt: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), // 8-byte salt
-        //     hashlock:  root, //
-        //     allow_multi_fill: true,
-        //     whitelisted_addresses: [
-        //         // Relay address
-        //         process.env.RELAY_ACCOUNT_ADDRESS!,
-        //         // Add more addresses if needed
-        //     ],
-        //     withDrawPeriod: withdrawPeriod, // 1 hour
-        //     publicWithDrawPeriod: 7200, // 2 hours
-        //     cancelPeriod: 1800, // 30 minutes
-        //     publicCancelPeriod: 3600, // 1 hour
-        // };
-        // const orderResult = await orderManager.createOrder(orderParams);
-        // console.log("Order created:", orderResult.orderAddress);
-        // // Step 2: Create an escrow for the order
-        // console.log("\n=== Creating Escrow ===");
-        // // Construct a merkle proof with 4 leafs (and 4 preimages to the leafs)
-        // // Iterate through the proof and print the hex
-        // for (let i = 0; i < merkleTree.getProof(0).length; i++) {
-        //     const proofElement = merkleTree.getProof(0)[i];
-        //     console.log(
-        //         `Proof element ${i}: ${ethers.hexlify(proofElement.hash)} (isRight: ${proofElement.isRight})`
-        //     );
-        // }
-        // merkleTree.validateProof(
-        //     0, // Leaf index
-        //     merkleTree.getLeafBytes(0), // First leaf of the Merkle tree
-        //     merkleTree.getProof(0), // Merkle proof for the first leaf
-        //     merkleTree.getRootBytes() // Merkle root
-        // );
-        // // merkleTree.getMoveProof(0)
-        // const escrowParams = {
-        //     orderAddress: orderResult.orderAddress,
-        //     depositAssetMetadata:
-        //         "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-        //     incentive_feeAssetMetadata:
-        //         "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e", // Replace with actual metadata object
-        //     makeAmount: 50, // 0.5 tokens (half of the order amount)
-        //     incentiveFee: 20, // 0.002 tokens
-        //     receiver:
-        //         "0x3926348fbe4db32987c5ff2306d67efe3450bd9c5fc58745f7852f9ef4dc13f1", // User address
-        //     leaf: merkleTree.getLeafBytes(0), // First leaf of the Merkle tree
-        //     // leaf: hashSecretWithEthers(merklePreimages[0]), // First preimage of the Merkle tree
-        //     // leaf: hashlock,
-        //     proof: merkleTree.getProof(0).reverse(), // Merkle proof for the first leaf
-        // };
-        // const escrowResult = await orderManager.createEscrowSrc(escrowParams);
-        // console.log("Escrow created:", escrowResult.escrowAddress);
-        // console.log("\n=== Summary ===");
-        // console.log("Order Address:", orderResult.orderAddress);
-        // console.log("Order Transaction:", orderResult.transactionHash);
-        // console.log("Escrow Address:", escrowResult.escrowAddress);
-        // console.log("Escrow Transaction:", escrowResult.transactionHash);
-        // //  Wait for 6 seconds before withdrawing assets
-        // console.log("\n=== Withdrawing Assets ===");
-        // await new Promise((resolve) => setTimeout(resolve, withdrawPeriod * 1000 + 1000));
-        // const withdrawParams = {
-        //     escrowAddress: escrowResult.escrowAddress,
-        //     secret: merklePreimages[0], // The same secret used to create the order hashlock
-        //     // secret: secret, // The same secret used to create the order hashlock
-        //     incentive_feeAssetMetadata: orderParams.incentive_feeAssetMetadata,
-        //     depositAssetMetadata: orderParams.depositAssetMetadata,
-        // };
-        // const withdrawResult = await orderManager.withdrawAssets(
-        //     withdrawParams
-        // );
-        // console.log("Assets withdrawn successfully!");
-        // =======================================================
-        // ======================= APT DST =======================
-        // =======================================================
-        // const orderManager = new AptosOrderManager();
-        // // // Check account balances first
-        // await orderManager.checkAccountBalances();
-        // // Random secret bytes of length 32
-        // const secret = new Uint8Array(32);
-        // crypto.getRandomValues(secret);
-        // // Hash the secret using keccak256
-        // const hashlock = hashSecretWithEthers(secret);
-        // const withdrawPeriod = 1; // 6 seconds for testing
-        // // Example order parameters
-        // const escrowParams = {
-        //     order_hash: new Uint8Array(32), // Replace with actual order hash
-        //     depositAssetMetadata:
-        //         "0x1a4589ba938c6613d6f79e88f60cbfa614ee1127255615e1357a1c0e614ae76d", // Replace with actual metadata object
-        //     incentive_feeAssetMetadata:
-        //         "0x8164c59ac168682f0bfcca797ffd6c094ed01aba9ca627a4fab9c8cacbd37c6e",
-        //     deposit_amount: 1000,
-        //     incentive_fee: 10,
-        //     hashlock: hashlock,
-        //     withDrawPeriod: withdrawPeriod,
-        //     publicWithDrawPeriod: 7200,
-        //     cancelPeriod: 86400,
-        //     publicCancelPeriod: 172800,
-        // };
-        // const escrowResult = await orderManager.createEscrowDst(escrowParams);
-        // console.log("Escrow created:", escrowResult.escrowAddress);
-        // //  Wait for 6 seconds before withdrawing assets
-        // console.log("\n=== Withdrawing Assets ===");
-        // await new Promise((resolve) =>
-        //     setTimeout(resolve, withdrawPeriod * 1000 + 1000)
-        // );
-        // const withdrawParams = {
-        //     escrowAddress: escrowResult.escrowAddress,
-        //     secret: secret, // The same secret used to create the order hashlock
-        //     incentive_feeAssetMetadata: escrowParams.incentive_feeAssetMetadata,
-        //     depositAssetMetadata: escrowParams.depositAssetMetadata,
-        // };
-        // const withdrawResult = await orderManager.withdrawAssets(
-        //     withdrawParams
-        // );
-        // console.log("Assets withdrawn successfully!");
-        // =======================================================
-        // ======================= ETH SRC =======================
-        // =======================================================
-        const transactionSignerPrivateKey =
-            process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
-        const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
-        const makerAddress = process.env.MAKER_ADDRESS!;
-        // Initialize resolver manager with transaction signer
-        const resolverManager = new ResolverManager(
-            transactionSignerPrivateKey
-        );
-        // Check balances
-        const transactionSignerBalance = await resolverManager.checkBalance(
-            resolverManager.transactionSigner.address
-        );
-        console.log(
-            "Transaction Signer Balance:",
-            transactionSignerBalance,
-            "ETH"
-        );
-        // Deploy source escrow
-        const deployParams = {
-            secret: secret,
-            makerAddress: makerAddress, // Maker's address
-            makerPrivateKey: makerPrivateKey, // Maker's private key (for signing)
-            makeAmount: BigInt("1000000000"), // 1 ETH in wei
-            safetyDeposit: BigInt("0"), // 0.1 ETH in wei
-        };
-        console.log("🚀 Deploying source escrow...");
-        console.log(
-            "📝 Transaction will be sent by:",
-            resolverManager.transactionSigner.address
-        );
-        console.log("👤 Order will be signed by:", makerAddress);
-        const result = await resolverManager.deploySrc(deployParams);
-        console.log("✅ Source escrow deployed successfully!");
-        console.log("📍 Escrow Address:", result.escrowAddress);
-        console.log("🔗 Transaction Hash:", result.transactionHash);
-        // =======================================================
-        // ======================= ETH DST =======================
-        // =======================================================
-        // const secret = new Uint8Array(32);
-        // crypto.getRandomValues(secret);
-        // // Hash the secret using keccak256
-        // const hashlock = hashSecretWithEthers(secret);
-        // const transactionSignerPrivateKey =
-        //     process.env.TRANSACTION_SIGNER_PRIVATE_KEY!; // Calls resolver
-        // const makerPrivateKey = process.env.MAKER_PRIVATE_KEY!; // Signs order and permit
-        // const makerAddress = process.env.MAKER_ADDRESS!;
-        // // Initialize resolver manager with transaction signer
-        // const resolverManager = new ResolverManager(
-        //     transactionSignerPrivateKey
-        // );
-        // // Check balances
-        // const transactionSignerBalance = await resolverManager.checkBalance(
-        //     resolverManager.transactionSigner.address
-        // );
-        // console.log(
-        //     "Transaction Signer Balance:",
-        //     transactionSignerBalance,
-        //     "ETH"
-        // );
-        // // Deploy destination escrow
-        // const orderHash = new Uint8Array(32);
-        // crypto.getRandomValues(orderHash);
-        // const deployParams = {
-        //     orderHash: orderHash, // Use a random order hash for testing
-        //     secret: secret, // The secret used to create the hashlock
-        //     amount: BigInt("1000000"), // 1 ETH in wei
-        //     makerAddress: makerAddress, // Maker's address
-        //     timeDelays: {
-        //         srcWithdrawalDelay: 10,
-        //         srcPublicWithdrawalDelay: 10 * 60,
-        //         srcCancellationDelay: 15 * 60,
-        //         srcPublicCancellationDelay: 20 * 60,
-        //         dstWithdrawalDelay: 10,
-        //         dstPublicWithdrawalDelay: 10 * 60,
-        //         dstCancellationDelay: 15 * 60,
-        //     },
-        // };
-        // const { escrowAddress, transactionHash } =
-        //     await resolverManager.deployDst(deployParams);
+        apt_to_eth(BigInt("10000000"), BigInt("100000000000"));
+        // eth_to_apt(BigInt("100000000000"), BigInt("1000"));
     } catch (error) {
         console.error("Failed to create order:", error);
         process.exit(1);

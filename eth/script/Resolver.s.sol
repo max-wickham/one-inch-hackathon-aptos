@@ -10,11 +10,16 @@ import {Resolver, Timelocks, Address, IEscrowFactory, IBaseEscrow, IOrderMixin} 
 import {EscrowFactory} from "cross-chain-swap@1/EscrowFactory.sol";
 import {ERC20Permit} from "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
-
+/* 
+ * Basic Script to deploy the Resolver contract and its dependencies.
+ * It also mints tokens and sets up permissions for the resolver and factory.
+ * The script assumes the existence of a user and a relay caller address.
+**/
 contract ResolverScript is Script {
     function run() external {
         address user = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
-        address relayCaller = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        // address relayCaller = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        address relayCaller = 0x6c4f12827fFC1398aE4a794fe51471fdc2A098D2;
         
             vm.startBroadcast();
             MockPermitToken token = new MockPermitToken(msg.sender);
@@ -82,88 +87,3 @@ contract MockPermitTakerToken is ERC20Permit {
         _approve(owner, spender, type(uint256).max, false);
     }
 }
-
-// contract ResolverOrderCreate is Script {
-
-//     function run() external {
-
-//         // Deploy all contract needed for the Resolver
-//         // This includes the LimitOrderProtocol, EscrowFactory, and Resolver contracts
-//         address resolver = 0x9ee0DC1f7cF1a5c083914e3de197Fd1F484E0578;
-//         address factory = 0xBd640b5C2190372877346474c8a9aA7b8C871DF1;
-//         uint makeAmount = 1 ether;
-//         bytes32 secret = keccak256(abi.encodePacked("secret"));
-//         bytes32 hashlock = keccak256(abi.encodePacked(secret));
-
-//         uint32 srcWithdrawalDelay = 5 minutes;
-//         uint32 srcPublicWithdrawalDelay = 10 minutes;
-//         uint32 srcCancellationDelay = 15 minutes;
-//         uint32 srcPublicCancellationDelay = 20 minutes;
-//         uint32 dstWithdrawalDelay = 5 minutes;
-//         uint32 dstPublicWithdrawalDelay = 10 minutes;
-//         uint32 dstCancellationDelay = 14 minutes; // Should be less than srcCancellation
-//         Timelocks timelock = Timelocks.wrap(
-//             uint(srcWithdrawalDelay) |
-//                 (uint(srcPublicWithdrawalDelay) << 32) |
-//                 (uint(srcCancellationDelay) << 64) |
-//                 (uint(srcPublicCancellationDelay) << 96) |
-//                 (uint(dstWithdrawalDelay) << 128) |
-//                 (uint(dstPublicWithdrawalDelay) << 160) |
-//                 (uint(dstCancellationDelay) << 192) |
-//                 (uint(block.timestamp) << 224)
-//         );
-
-//         IEscrowFactory.ExtraDataArgs memory extraDataArgs = IEscrowFactory
-//             .ExtraDataArgs({
-//                 hashlockInfo: hashlock,
-//                 dstChainId: 0, // Mock destination chain ID
-//                 dstToken: Address.wrap(uint(0)), // Mock destination token
-//                 deposits: 0, // Mock deposits
-//                 timelocks: timelock
-//             });
-
-//         bytes memory permit = _constructPermit(
-//             token,
-//             maker.addr,
-//             address(lop),
-//             makeAmount,
-//             block.timestamp + 1 hours,
-//             maker.privateKey
-//         );
-//         vm.startBroadcast();
-
-//         // MockPermitToken token = new MockPermitToken(msg.sender);
-//         // MockPermitTakerToken takerToken = new MockPermitTakerToken(msg.sender);
-//         // LimitOrderProtocol lop = new LimitOrderProtocol(IWETH(address(token)));
-//         // EscrowFactory factory = new EscrowFactory(
-//         //     address(lop),
-//         //     token,
-//         //     token,
-//         //     msg.sender,
-//         //     30 minutes, // srcRescueDelay
-//         //     30 minutes // dstRescueDelay
-//         // );
-//         // Resolver resolver = new Resolver(
-//         //     address(lop),
-//         //     address(factory),
-//         //     msg.sender
-//         // );
-
-//         // token.transfer(address(resolver), 1000000 ether);
-//         // takerToken.transfer(address(resolver), 1000000 ether);
-
-//         // vm.stopBroadcast();
-//         // console.log("Resolver deployed at:", address(resolver));
-//         // console.log("Factory deployed at:", address(factory));
-//         // console.log("LimitOrderProtocol deployed at:", address(lop));
-//         // console.log("MockPermitToken deployed at:", address(token));
-//         // console.log("MockPermitTakerToken deployed at:", address(takerToken));
-
-//         // vm.startBroadcast();
-
-//         // // Deploy the Resolver contract
-//         // console.log("Resolver deployed at:", address(resolver));
-
-//         vm.stopBroadcast();
-//     }
-// }

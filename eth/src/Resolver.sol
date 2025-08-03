@@ -33,6 +33,9 @@ contract Resolver is Ownable {
     mapping(address => IBaseEscrow.Immutables) private _immutables;
     // Mapping to store order hash to escrow address
     mapping(bytes32 => address) _orderHashToEscrow;
+    // Order hash to dst escrow address mapping
+    mapping (bytes32 => address) _dstEscrowAddresses;
+
 
     constructor(
         address lop,
@@ -322,10 +325,6 @@ contract Resolver is Ownable {
         // Validate the order signature
         address maker = address(uint160(Address.unwrap(order.maker)));
         if (!isValidOrderSig(order, v, r, s, maker)) {
-            console.log(v);
-            console.logBytes32(r);
-            console.logBytes32(s);
-            console.log("Invalid order signature");
             revert("Invalid order signature");
         }
         require(
@@ -365,9 +364,6 @@ contract Resolver is Ownable {
         return escrow;
     }
 
-    // function getDstI
-    mapping (bytes32 => address) _dstEscrowAddresses;
-    // mapping (address => IBaseEscrow.Immutables) _dstImmutables;
     function deployDst(
         bytes32 orderHash,
         bytes32 hashlock,
